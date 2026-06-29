@@ -190,7 +190,7 @@ yolo_plus/
 |---|---|
 | 仓库名 | yolo-plus |
 | 默认分支 | main |
-| 远程地址 | (创建后填入) |
+| 远程地址 | https://github.com/xiaojiegenga/yolo_plus.git |
 
 ### 创建远程仓库步骤
 
