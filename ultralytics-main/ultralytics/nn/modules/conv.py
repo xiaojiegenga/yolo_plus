@@ -590,11 +590,14 @@ class CBAM(nn.Module):
         spatial_attention (SpatialAttention): Spatial attention module.
     """
 
-    def __init__(self, c1, kernel_size=7):
+    def __init__(self, c1, c2=None, kernel_size=7):
         """Initialize CBAM with given parameters.
 
         Args:
-            c1 (int): Number of input channels.
+            c1 (int): Number of input channels (from previous layer, auto-provided by framework).
+            c2 (int | None): Output channels — ignored, CBAM preserves channel count.
+                Only accepted for compatibility with the Ultralytics YAML parsing framework
+                which passes (c1, c2, *args) to all base_modules.
             kernel_size (int): Size of the convolutional kernel for spatial attention.
         """
         super().__init__()
