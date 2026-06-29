@@ -1,6 +1,6 @@
 # YOLO26 改进代码 — 工作流与修改记录
 
-> **最后更新**: 2026-06-29 16:50 | **当前阶段**: 环境搭建完成，准备开始 CBAM 改进
+> **最后更新**: 2026-06-29 17:30 | **当前阶段**: v1-CBAM 代码已完成，可以开始训练
 
 ---
 
@@ -134,6 +134,42 @@ pip install ultralytics==8.4.80 --force-reinstall
 
 ---
 
+### v1 — CBAM 注意力机制（✅ 代码完成，⬜ 待训练）
+
+**日期**: 2026-06-29 | **Git 分支**: `v1-cbam` | **GitHub commit**: `ae38878`
+
+**改动文件**:
+| # | 文件 | 改动 |
+|---|---|---|
+| 1 | `ultralytics/nn/modules/conv.py:593` | CBAM 构造函数添加 `c2=None` 参数（框架兼容） |
+| 2 | `ultralytics/nn/tasks.py:40` | import 添加 CBAM |
+| 3 | `ultralytics/nn/tasks.py:1836` | `base_modules` 注册 CBAM |
+| 4 | `ultralytics/cfg/models/26/yolo26-cbam.yaml` | **新建** — CBAM 版模型配置 |
+
+**模型参数对比**:
+
+| 指标 | 原始 yolo26m | yolo26m-cbam | 变化 |
+|---|---|---|---|
+| 层数 | 280 | 300 | +20 |
+| 参数量 | 21.78 M | 22.63 M | +0.85 M (+3.9%) |
+| 计算量 | 74.7 GFLOPs | 75.4 GFLOPs | +0.7 GFLOPs (+0.9%) |
+
+**详细讲解**: 见 [node.md](node.md) 第一章。
+
+**训练状态**: ⬜ 待训练 → 训练后填入下方指标
+
+| 指标 | Baseline | v1 CBAM |
+|---|---|---|
+| P(M) | 0.717 | ? |
+| R(M) | 0.620 | ? |
+| mAP50(M) | 0.683 | ? |
+| mAP50-95(M) | 0.329 | ? |
+| 卷叶螟 AP50 | 0.604 | ? |
+| 钻心虫 AP50 | 0.763 | ? |
+| 卷叶螟漏检率 | 52% | ? |
+
+---
+
 ## 4. 改进计划
 
 > ⏱️ **中期答辩策略**：每个改进独立与 Baseline 对比（不是论文那种累积叠加的消融）。
@@ -167,8 +203,8 @@ pip install ultralytics==8.4.80 --force-reinstall
 
 | # | 模块 | 涉及文件 | 状态 |
 |---|---|---|---|
-| 1 | CBAM 注册 | `nn/tasks.py` | ⬜ |
-| 2 | v1 YAML | `cfg/models/26/yolo26-cbam.yaml` | ⬜ |
+| 1 | CBAM 注册 | `nn/tasks.py` | ✅ (2026-06-29) |
+| 2 | v1 YAML | `cfg/models/26/yolo26-cbam.yaml` | ✅ (2026-06-29) |
 | 3 | P2 特征层 | `cfg/models/26/yolo26-p2.yaml` | ⬜ |
 | 4 | Dice Loss | loss 计算或 head 修改 | ⬜ |
 | 5 | Combined YAML | `cfg/models/26/yolo26-plus.yaml` | ⬜ |
