@@ -19,6 +19,13 @@ build/
 # This directory must remain local and must not be uploaded to Git.
 /results/
 
+# Frequently updated project notes and AI context
+# Keep these files local so branch switching and rollback do not change them.
+# Only formal experiment records under /experiment_records/ remain tracked.
+/*.md
+/experiments/*.md
+/scripts/*.md
+
 # Local safety copies created during project maintenance
 /.local_backups/
 
