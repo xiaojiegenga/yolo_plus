@@ -6,30 +6,40 @@ __pycache__/
 dist/
 build/
 
-# 训练权重（太大）
+# Model weights and exported checkpoints
 *.pt
 *.pth
 
-# 训练结果 runs 目录（太大）
-runs/
-runs_seg/
+# Raw training and validation outputs
+/runs/
+/runs_seg/
 
-# IDE
+# User-managed local experiment archive
+# Baseline/V1 and future successful raw runs are copied here manually.
+# This directory must remain local and must not be uploaded to Git.
+/results/
+
+# Local safety copies created during project maintenance
+/.local_backups/
+
+# Local assistant/editor state
+/.claude/
 .vscode/
 .idea/
 
-# 系统文件
+# System files
 .DS_Store
 Thumbs.db
 
 # Jupyter
 .ipynb_checkpoints/
 
-# 数据配置文件（含本地路径，不提交）
+# Dataset config containing machine-specific paths
 yolo_data.yaml
+/experiments/*.local.yaml
 
-# Conda 环境
+# Conda environment metadata
 conda-meta/
 
-# 训练脚本中的临时文件
+# Logs
 *.log
