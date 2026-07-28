@@ -14,6 +14,9 @@ build/
 runs/
 runs_seg/
 
+# 用户本地保存的完整实验结果，不上传 Git
+/results/
+
 # IDE
 .vscode/
 .idea/
