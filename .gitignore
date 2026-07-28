@@ -17,6 +17,12 @@ runs_seg/
 # 用户本地保存的完整实验结果，不上传 Git
 /results/
 
+# 频繁更新的项目笔记和 AI 上下文，仅保存在本地
+# 项目级 Markdown 只允许 /experiment_records/ 中的正式实验记录上传。
+/*.md
+/experiments/*.md
+/scripts/*.md
+
 # IDE
 .vscode/
 .idea/
