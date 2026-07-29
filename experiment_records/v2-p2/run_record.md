@@ -241,6 +241,72 @@ batch:                       4（显式资源覆盖）
 
 没有启动过“64 通道 + batch=4”的任何 epoch，因此本次调整发生在正式训练和短跑之前，不存在挑选训练结果的问题。
 
+## 2026-07-30：P2-128 + batch=4 的 1 epoch 预检通过
+
+用户手动执行了 P2 最终候选结构的 1 epoch 资源与功能预检：
+
+```text
+runs/segment/runs_seg/yolo26m_v2_p2_b4_preflight1_seg_20260730_015604
+```
+
+### 可追溯信息
+
+| 项目 | 记录 |
+|---|---|
+| Git branch / commit | `v2-p2` / `d80d2f50752e59e3665302ac417bc4c36d74f90e` |
+| 模型 | `yolo26m-p2-seg.yaml`，P2 Class hidden=128 |
+| 运行类型 | `preflight-1-epoch`，非正式对比 |
+| Profile / Effective batch | `8 / 4` |
+| Effective SHA256 | `C4013DF9A005BDE98882BCEACF7B570DEB2261D7F9800B08E39FAD19195D33DF` |
+| `best.pt` SHA256 | `2D8CABE8C8AFA3F34941347B2AA58C7A98F24EBD2BC88F48E57FEE27810A2557` |
+| `results.csv` SHA256 | `B94A3D00D7D0BDACB588749F09F6988EA4280B1056FF677E0DE4972C166810BF` |
+| `experiment_manifest.json` SHA256 | `0DE0E11FD05CF7030E36DE463217D18FD7BEB2A1AB2633700ADBF56C061B3C69` |
+| 正式对比资格 | `false` |
+
+### 资源门禁
+
+| 项目 | 结果 |
+|---|---:|
+| 物理显存 | 8188 MiB |
+| 训练日志最高 `GPU_mem` | 5.09 G |
+| 训练 batch 数 | 192 |
+| 训练循环耗时 | 51.2 s |
+| `results.csv` epoch 时间 | 55.2019 s |
+| 稳态速度 | 约 3.7～4.2 it/s |
+| OOM / NaN / Inf | 均未出现 |
+
+相对轻量 Head、batch=8 的中止预检，显存记录由约 8.56 G 降至 5.09 G，减少约 40.5%；相对最初 Head、batch=8 的完整预检，显存由 10.2 G 降至 5.09 G，单 epoch 由 1342 s 降至 55.2 s。由于模型宽度和 batch 同时发生过变化，这些数字只用于判断当前配置是否适配 8GB 显卡，不用于比较模型精度。
+
+当前显存低于独立显存上限，迭代速度稳定，未再出现 12～13 s/it 的分页卡顿。因此 **batch=4 资源门禁通过**。
+
+### 功能门禁
+
+`results.csv` 中五项训练损失均为有限值：
+
+| Box | Seg | Cls | DFL | Semantic |
+|---:|---:|---:|---:|---:|
+| 2.03203 | 2.53701 | 4.32607 | 0.00894 | 4.96386 |
+
+训练结束后使用 `best.pt` 自动执行的独立 `split=val` 结果：
+
+| 类别 | Mask P | Mask R | Mask mAP50 | Mask mAP50-95 |
+|---|---:|---:|---:|---:|
+| all | 0.546 | 0.461 | 0.431 | 0.175 |
+| Rice leaffolder | 0.550 | 0.295 | 0.374 | 0.151 |
+| Rice stemborers | 0.541 | 0.626 | 0.488 | 0.199 |
+
+整体 Box 指标为 P=`0.507`、R=`0.434`、mAP50=`0.391`、mAP50-95=`0.195`。`val_batch0_pred.jpg` 中可以直接看到非空的实例 Mask，和标注图的目标位置处于同一空间坐标系，未出现旧 V2 的全空 Mask、尺寸错位或 Mask mAP≈0 问题。因此 **四尺度预测、Mask coefficient、三尺度 Proto、Loss 与 Validator 功能门禁通过**。
+
+### 结论边界
+
+本次只能证明：
+
+1. P2-128 + batch=4 能在 RTX 4060 Ti 8GB 上稳定训练；
+2. Box 与 Mask 链路均正常；
+3. 可以进入 10 epoch 趋势预检。
+
+本次只有 1 epoch，而且处于 5 epoch warmup 的第一轮，不能证明 P2 优于 Baseline，也不能写入论文正式指标表。后续必须通过 10 epoch 短跑观察多轮 loss 和 val 指标趋势，再决定是否启动 400 epoch。
+
 ## 训练前检查清单
 
 - [x] 确认新 `v2-p2` 从 `main` 独立开始；
@@ -259,8 +325,8 @@ batch:                       4（显式资源覆盖）
 - [x] 增加并验证显式记录的 batch=4 资源覆盖；
 - [x] 将 P2 分类宽度由额外轻量的 64 调整为自然宽度 128；
 - [x] P2-128 + batch=4 的无训练门禁与 dry-run 通过；
-- [ ] 用户手动完成 P2-128、batch=4 的 1 epoch 资源预检；
-- [ ] 确认 batch=4 不再发生严重显存分页；
+- [x] 用户手动完成 P2-128、batch=4 的 1 epoch 资源预检；
+- [x] 确认 batch=4 不再发生严重显存分页；
 - [ ] 用户手动完成 10 epoch 短跑；
 - [ ] 确认 Box/Mask loss 与指标有正常学习趋势；
 - [ ] 用户手动启动 400 epoch 正式训练；
@@ -269,4 +335,4 @@ batch:                       4（显式资源覆盖）
 
 ## 结论边界
 
-目前只能得出“V2 功能链路正常、P2-128 Head 通过无训练门禁，但 batch=8 超出当前 8GB 显卡资源”，不能得出“P2 有效”或“可以直接用于论文结果”。下一步必须先由用户手动完成 P2-128 + batch=4 的 1 epoch 资源预检；只有速度和显存通过后，才进入 10 epoch 趋势检查。
+目前可以得出“V2 功能链路正常，P2-128 + batch=4 已通过 1 epoch 功能与资源门禁”，仍不能得出“P2 优于 Baseline”或“可以直接用于论文结果”。下一步由用户手动完成 10 epoch 趋势预检，确认多轮 Box/Mask loss 与 val 指标走势后，才能决定是否进入 400 epoch。
