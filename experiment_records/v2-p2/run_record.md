@@ -4,15 +4,15 @@
 
 - Git 分支：`v2-p2`
 - 起点：`main` commit `d32a73f`
-- 状态：原始 P2 Head 已完成 1 epoch 功能预检，但资源门禁失败；P2 分类支路已轻量化，等待重新预检
+- 状态：两次 batch=8 资源门禁均失败；已增加显式 batch=4 资源覆盖，等待用户手动重新预检
 - 对比对象：Baseline
 - 正式指标来源：未来 400 epoch 训练所得 `best.pt` 的独立 `split=val`
 
 > 已由用户手动执行过一次 1 epoch 预检。该结果只用于检查功能和资源，不进入论文正式对比表。10 epoch 与 400 epoch 均未启动；所有训练命令仍必须由用户本人手动输入。
 
-## 唯一实验变量
+## 模型变量与资源例外
 
-在保留 Baseline Backbone、P3/P4/P5 Neck、P3-based Proto26、Mask Loss、Validator 和全部训练参数的前提下：
+模型结构实验仍只研究 P2。在保留 Baseline Backbone、P3/P4/P5 Neck、P3-based Proto26、Mask Loss 和 Validator 的前提下：
 
 1. 从 Neck P3 上采样到 P2；
 2. 与 Backbone P2 拼接并通过 C3k2 融合；
@@ -22,6 +22,14 @@
 
 本实验验证新增 P2 小目标预测能力能否提高卷叶螟的 Mask Recall 和 AP。
 
+由于两次 batch=8 预检都超过 8 GB 物理显存并触发严重分页，后续运行增加唯一资源例外：
+
+```text
+batch: 8 → 4
+```
+
+其余训练参数不变。该例外会写入运行名、参数指纹和 manifest；它不能再被表述为与原 batch=8 Baseline “训练参数完全相同”。若最终用于严谨论文对比，应补跑同为 batch=4 的 Baseline。
+
 ## 明确不包含
 
 - CBAM；
@@ -30,8 +38,8 @@
 - `Proto26` 源码改动；
 - `SegmentationValidator` 改动；
 - Mask Loss 改动；
-- 额外训练参数优化；
-- batch、imgsz、增强策略或数据划分变化。
+- batch 以外的训练参数优化；
+- imgsz、增强策略或数据划分变化。
 
 ## 实现文件
 
@@ -42,7 +50,7 @@
 | `ultralytics/nn/modules/__init__.py` | 导出 `Segment26P2` |
 | `ultralytics/nn/tasks.py` | 注册新 Head，并提供受控的语义化预训练 Head 迁移入口 |
 | `scripts/check_v2_p2.py` | 只做结构、权重、前向和损失检查，绝不训练 |
-| `scripts/train_yolo26_seg.py` | 公共训练入口增加迁移报告及 1/10 epoch 非正式预检模式 |
+| `scripts/train_yolo26_seg.py` | 公共训练入口增加迁移报告、1/10 epoch 预检，以及显式记录的 `--batch 4` 资源覆盖 |
 
 ## 预训练权重迁移
 
@@ -156,6 +164,49 @@ runs/segment/runs_seg/yolo26m_v2_p2_preflight1_seg_20260729_195807
 
 与轻量化前的静态模型相比，参数减少 208,512，FLOPs 减少 10.794 G。是否真正解决显存分页和异常慢速，仍必须由下一次用户手动 1 epoch 预检确认。
 
+## 2026-07-30：轻量 Head 的 batch=8 资源预检仍失败
+
+运行目录：
+
+```text
+runs/segment/runs_seg/yolo26m_v2_p2_preflight1_seg_20260730_013613
+```
+
+对应提交：`7f24bd4`。用户在训练进度约 `12/96` 时主动终止，因此没有完整 epoch、验证指标或可用于比较的 `results.csv`。
+
+| 项目 | 观察结果 |
+|---|---:|
+| GPU_mem | 从 8.48 G 上升并稳定在约 8.56 G |
+| 稳态速度 | 约 12～13 秒/it |
+| 预计单 epoch | 约 20 分钟 |
+| 物理显存 | 8188 MiB |
+
+轻量分类支路将峰值记录从约 10.2 G 降至 8.56 G，说明优化确实节省了约 1.64 G，但仍超过独立显存并发生 Windows WDDM 共享内存分页。资源门禁仍失败，不继续 batch=8。
+
+## 2026-07-30：采用显式 batch=4
+
+公共脚本新增受控参数：
+
+```text
+--batch 4
+```
+
+保护规则：
+
+- 默认值仍从 Baseline profile 读取为 8；
+- 目前只允许显式覆盖为 4；
+- 运行目录自动带 `_b4`；
+- 控制台同时打印 Baseline profile SHA256 与实际参数 SHA256；
+- `experiment_manifest.json` 记录 `profile_batch=8`、`effective_batch=4` 和 `runtime_overrides`；
+- 400 epoch 若使用 batch=4，会标记为 `formal-resource-adjusted`，不会错误标记为与原 Baseline 完全同参数；
+- Ultralytics 的 `nbs=64` 使稳定阶段梯度累积由约 8 次变为约 16 次，有效 batch 仍接近 64，但 BatchNorm 的真实 micro-batch 不同，因此不能声称完全无性能影响。
+
+`--batch 4 --preflight-epochs 1 --dry-run` 已通过，未启动训练。预检实际参数指纹为：
+
+```text
+C4013DF9A005BDE98882BCEACF7B570DEB2261D7F9800B08E39FAD19195D33DF
+```
+
 ## 训练前检查清单
 
 - [x] 确认新 `v2-p2` 从 `main` 独立开始；
@@ -169,8 +220,11 @@ runs/segment/runs_seg/yolo26m_v2_p2_preflight1_seg_20260729_195807
 - [x] Params/FLOPs 统计完成；
 - [x] 用户手动完成原始 P2 Head 的 1 epoch train+val；
 - [x] 确认原始 P2 Head 的 Box 与 Mask 均有非零、合理输出；
-- [ ] 用户手动重新预检轻量 P2 Head 的 1 epoch 资源占用与速度；
-- [ ] 确认轻量 P2 Head 不再发生严重显存分页；
+- [x] 用户手动启动轻量 P2 Head 的 batch=8 资源预检；
+- [x] 确认轻量 P2 Head 在 batch=8 下仍发生严重显存分页并终止；
+- [x] 增加并验证显式记录的 batch=4 资源覆盖；
+- [ ] 用户手动完成轻量 P2 Head、batch=4 的 1 epoch 资源预检；
+- [ ] 确认 batch=4 不再发生严重显存分页；
 - [ ] 用户手动完成 10 epoch 短跑；
 - [ ] 确认 Box/Mask loss 与指标有正常学习趋势；
 - [ ] 用户手动启动 400 epoch 正式训练；
@@ -179,4 +233,4 @@ runs/segment/runs_seg/yolo26m_v2_p2_preflight1_seg_20260729_195807
 
 ## 结论边界
 
-目前只能得出“V2 功能链路正常，轻量 P2 Head 通过无训练门禁”，不能得出“P2 有效”或“可以直接用于论文结果”。下一步必须先由用户手动重新完成 1 epoch 资源预检；只有速度和显存通过后，才进入 10 epoch 趋势检查。
+目前只能得出“V2 功能链路正常、轻量 P2 Head 正常，但 batch=8 超出当前 8GB 显卡资源”，不能得出“P2 有效”或“可以直接用于论文结果”。下一步必须先由用户手动完成 batch=4 的 1 epoch 资源预检；只有速度和显存通过后，才进入 10 epoch 趋势检查。
