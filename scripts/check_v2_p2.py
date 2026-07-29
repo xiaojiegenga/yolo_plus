@@ -23,6 +23,7 @@ PROFILE_PATH = REPO_ROOT / "experiments" / "yolo26m_seg_baseline_train.yaml"
 EXPECTED_STRIDES = (4.0, 8.0, 16.0, 32.0)
 EXPECTED_HEAD = "Segment26P2"
 EXPECTED_NM = 32
+EXPECTED_SEED = 42
 
 
 def parse_args() -> argparse.Namespace:
@@ -71,6 +72,7 @@ def synthetic_loss_forward(initialized_v2, imgsz: int) -> dict:
         train_args = yaml.safe_load(file)["train"]
 
     # This mirrors the model rebuild performed by SegmentationTrainer after it reads dataset nc=2.
+    torch.manual_seed(int(train_args["seed"]))
     model = SegmentationModel(initialized_v2.model.yaml, nc=2, verbose=False)
     model.load(initialized_v2.model, verbose=False)
     model.args = get_cfg(overrides=train_args)
@@ -83,7 +85,7 @@ def synthetic_loss_forward(initialized_v2, imgsz: int) -> dict:
     masks[1, int(0.25 * mask_size) : int(0.70 * mask_size), int(0.39 * mask_size) : int(0.75 * mask_size)] = 1
     sem_masks = torch.zeros(2, mask_size, mask_size)
     sem_masks[1][masks[1] > 0] = 1
-    torch.manual_seed(0)
+    torch.manual_seed(int(train_args["seed"]) + 1)
     batch = {
         "img": torch.rand(2, 3, imgsz, imgsz),
         "batch_idx": torch.tensor([0, 1]),
@@ -124,6 +126,7 @@ def main() -> None:
     from ultralytics import YOLO
     from ultralytics.utils.torch_utils import get_flops
 
+    torch.manual_seed(EXPECTED_SEED)
     v2 = YOLO(str(MODEL_YAML))
     net = v2.model
     head = net.model[-1]

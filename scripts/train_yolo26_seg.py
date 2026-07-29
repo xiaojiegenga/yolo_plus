@@ -428,6 +428,11 @@ def main() -> None:
         )
 
     verify_data_yaml(data_path, str(profile["dataset_yaml_sha256"]))
+    # Custom YAML models contain newly initialized layers (for V2 this is the P2 branch). Seed before model creation,
+    # not only inside Trainer, so these new weights are reproducible across separate script launches.
+    from ultralytics.utils.torch_utils import init_seeds
+
+    init_seeds(int(train_args["seed"]), deterministic=bool(train_args["deterministic"]))
     model, model_mode, transfer_report = build_model(
         yolo_class,
         model_path,
