@@ -24,6 +24,7 @@ EXPECTED_STRIDES = (4.0, 8.0, 16.0, 32.0)
 EXPECTED_HEAD = "Segment26P2"
 EXPECTED_NM = 32
 EXPECTED_SEED = 42
+EXPECTED_P2_CLS_HIDDEN = 64
 
 
 def parse_args() -> argparse.Namespace:
@@ -67,6 +68,7 @@ def synthetic_loss_forward(initialized_v2, imgsz: int) -> dict:
     """Rebuild the two-class trainer model and calculate one synthetic batch without backward or an optimizer."""
     from ultralytics.cfg import get_cfg
     from ultralytics.nn.tasks import SegmentationModel
+    from ultralytics.utils.torch_utils import get_flops
 
     with PROFILE_PATH.open("r", encoding="utf-8") as file:
         train_args = yaml.safe_load(file)["train"]
@@ -111,6 +113,8 @@ def synthetic_loss_forward(initialized_v2, imgsz: int) -> dict:
         "loss_vector": [round(float(value), 6) for value in loss_vector],
         "loss_sum": round(float(loss_vector.sum()), 6),
         "loss_items_box_seg_cls_dfl_sem": [round(float(value), 6) for value in loss_items],
+        "two_class_model_params": sum(parameter.numel() for parameter in model.parameters()),
+        "two_class_model_gflops_640": round(float(get_flops(model, imgsz=640)), 3),
         "trainer_rebuild_transfer": model.model[-1].pretrained_transfer_report,
     }
 
@@ -136,6 +140,37 @@ def main() -> None:
     require(tuple(float(x) for x in head.stride.tolist()) == EXPECTED_STRIDES, f"Unexpected strides: {head.stride}.")
     require(tuple(head.proto_input_indices) == (1, 2, 3), "Proto must receive P3/P4/P5 only.")
     require(net.yaml.get("scale") == "m", f"Expected m scale, got {net.yaml.get('scale')}.")
+    require(
+        head.p2_cls_hidden == EXPECTED_P2_CLS_HIDDEN,
+        f"Expected P2 class hidden width {EXPECTED_P2_CLS_HIDDEN}, got {head.p2_cls_hidden}.",
+    )
+    require(
+        head.cv3[0][0][1].conv.out_channels == EXPECTED_P2_CLS_HIDDEN
+        and head.cv3[0][1][1].conv.out_channels == EXPECTED_P2_CLS_HIDDEN,
+        f"One-to-many P2 class branch is not consistently {EXPECTED_P2_CLS_HIDDEN} channels.",
+    )
+    require(
+        head.cv3[1][0][1].conv.out_channels == 256 and head.cv3[1][1][1].conv.out_channels == 256,
+        "Pretrained P3 class branch width changed unexpectedly.",
+    )
+    require(
+        head.cv2[0][0].conv.out_channels == 64
+        and head.cv2[0][1].conv.out_channels == 64
+        and head.cv4[0][0].conv.out_channels == 64
+        and head.cv4[0][1].conv.out_channels == 64,
+        "P2 box or mask-coefficient branch width changed unexpectedly.",
+    )
+    if head.end2end:
+        require(
+            head.one2one_cv3[0][0][1].conv.out_channels == EXPECTED_P2_CLS_HIDDEN
+            and head.one2one_cv3[0][1][1].conv.out_channels == EXPECTED_P2_CLS_HIDDEN,
+            f"One-to-one P2 class branch is not consistently {EXPECTED_P2_CLS_HIDDEN} channels.",
+        )
+        require(
+            head.one2one_cv3[1][0][1].conv.out_channels == 256
+            and head.one2one_cv3[1][1][1].conv.out_channels == 256,
+            "Pretrained one-to-one P3 class branch width changed unexpectedly.",
+        )
 
     # Record every new P2 parameter before loading the baseline checkpoint.
     p2_hash_before = module_hash(net.model[23], net.model[24], net.model[25], head.cv2[0], head.cv3[0], head.cv4[0])
@@ -246,6 +281,12 @@ def main() -> None:
         "head": head.__class__.__name__,
         "scale": net.yaml.get("scale"),
         "strides": list(EXPECTED_STRIDES),
+        "p2_class_hidden_channels": head.p2_cls_hidden,
+        "p2_head_hidden_channels": {
+            "box": head.cv2[0][0].conv.out_channels,
+            "class": head.cv3[0][0][1].conv.out_channels,
+            "mask_coefficient": head.cv4[0][0].conv.out_channels,
+        },
         "head_inputs_at_check_size": head_inputs,
         "proto_inputs_at_check_size": proto_inputs,
         "proto_output": list(proto.shape),

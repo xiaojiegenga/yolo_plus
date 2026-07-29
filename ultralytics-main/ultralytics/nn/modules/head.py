@@ -464,6 +464,14 @@ class Segment26P2(Segment26):
             self.one2one_cv3 = self._move_last_branch_first(self.one2one_cv3)
             self.one2one_cv4 = self._move_last_branch_first(self.one2one_cv4)
 
+        # The inherited class-head width is derived from P3 (256 channels for YOLO26m), which is appropriate for
+        # P3/P4/P5 but unnecessarily expensive on the 160x160 P2 map. Keep the three pretrained baseline branches
+        # unchanged and replace only the new P2 class branch with a 64-channel depthwise-separable branch.
+        self.p2_cls_hidden = 64
+        self.cv3[0] = self._make_p2_class_branch(p2_ch, self.p2_cls_hidden, nc)
+        if end2end:
+            self.one2one_cv3[0] = copy.deepcopy(self.cv3[0])
+
         # Keep the proven baseline Proto26 path: P3 is the base feature and only P3/P4/P5 participate in fusion.
         self.proto = Proto26((p3_ch, p4_ch, p5_ch), self.npr, self.nm, nc)
         self.proto_input_indices = (1, 2, 3)
@@ -473,6 +481,15 @@ class Segment26P2(Segment26):
     def _move_last_branch_first(branches: nn.ModuleList) -> nn.ModuleList:
         """Reorder branches from (P3, P4, P5, P2) to (P2, P3, P4, P5)."""
         return nn.ModuleList([branches[-1], *list(branches[:-1])])
+
+    @staticmethod
+    def _make_p2_class_branch(c1: int, c_hidden: int, nc: int) -> nn.Sequential:
+        """Build the lightweight class predictor used only by the new high-resolution P2 feature map."""
+        return nn.Sequential(
+            nn.Sequential(DWConv(c1, c1, 3), Conv(c1, c_hidden, 1)),
+            nn.Sequential(DWConv(c_hidden, c_hidden, 3), Conv(c_hidden, c_hidden, 1)),
+            nn.Conv2d(c_hidden, nc, 1),
+        )
 
     @staticmethod
     def _copy_module_state(
