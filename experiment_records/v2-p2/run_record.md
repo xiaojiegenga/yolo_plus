@@ -307,6 +307,74 @@ runs/segment/runs_seg/yolo26m_v2_p2_b4_preflight1_seg_20260730_015604
 
 本次只有 1 epoch，而且处于 5 epoch warmup 的第一轮，不能证明 P2 优于 Baseline，也不能写入论文正式指标表。后续必须通过 10 epoch 短跑观察多轮 loss 和 val 指标趋势，再决定是否启动 400 epoch。
 
+## 2026-07-30：10 epoch 趋势预检通过
+
+用户手动完成：
+
+```text
+runs/segment/runs_seg/yolo26m_v2_p2_b4_preflight10_seg_20260730_020557
+```
+
+### 可追溯信息与数据完整性
+
+| 项目 | 记录 |
+|---|---|
+| Git branch / commit | `v2-p2` / `09bb133b7a841032147f6f95770fc15617df89b6` |
+| 运行类型 | `preflight-10-epoch`，非正式对比 |
+| Profile / Effective batch | `8 / 4` |
+| Effective SHA256 | `F5BAF9E12F49E378AC9B0D3FE004A774BFC795F3EAFBA31A3D3B5D753F02B5BF` |
+| `best.pt` SHA256 | `3F92CCF5671A01DADCEAB00B847952CAF9FDF6B3D337251F5A39F18B4EE1DDBB` |
+| `last.pt` SHA256 | `7AB4D75A2EC524FD032B40966D2382EC39BFC81492C0491B1968C8FD0DCFF538` |
+| `results.csv` SHA256 | `F62E9344077378F624171B6FC9924E3196B4CF62363709F246ED540CF0CEDD7F` |
+| `experiment_manifest.json` SHA256 | `2CBE16086BC70298BDCBB2E69A5816E010063AE06C21BD51B8CB13B4C8C0966C` |
+| 正式对比资格 | `false` |
+
+数据质量检查：
+
+- `results.csv` 完整包含 epoch 1～10，共 10 行，无缺失轮次；
+- 全部数值字段中 NaN/Inf 数量为 0；
+- 与独立 1 epoch 预检相比，`args.yaml` 只有 epochs、run name 和 save_dir 不同；
+- 两次独立运行的 epoch 1 训练损失和 Box/Mask 指标逐项完全一致，说明固定 seed 与 P2 新层初始化可复现；
+- manifest 中模型、预训练权重、数据集哈希、branch、commit 和 batch 覆盖均与实际运行一致。
+
+### Loss 与指标趋势
+
+| 指标 | Epoch 1 | Epoch 10 | 趋势 |
+|---|---:|---:|---|
+| train box loss | 2.03203 | 1.58874 | 下降 |
+| train seg loss | 2.53701 | 1.43963 | 下降 |
+| train cls loss | 4.32607 | 1.88303 | 下降 |
+| train dfl loss | 0.00894 | 0.00631 | 下降 |
+| train semantic loss | 4.96386 | 1.52205 | 下降 |
+| val box loss | 1.63519 | 1.45319 | 总体下降 |
+| val seg loss | 1.50690 | 1.32166 | 总体下降；epoch 9 最低 1.30310 |
+| val cls loss | 3.39152 | 1.82821 | 下降 |
+| Box mAP50 | 0.39143 | 0.56770 | 上升 |
+| Box mAP50-95 | 0.19577 | 0.33371 | 上升 |
+| Mask Recall | 0.45998 | 0.54419 | 上升 |
+| Mask mAP50 | 0.43096 | 0.53652 | 上升 |
+| Mask mAP50-95 | 0.17449 | 0.25827 | 上升；epoch 9 峰值 0.27593 |
+
+epoch 2～3 的 mAP 暂时回落发生在 `warmup_epochs=5` 的预热阶段。epoch 6～10 的 Box/Mask 指标恢复并形成总体上升趋势，同时训练和验证损失没有发散，因此属于正常早期波动。
+
+10 个 epoch 累计时间为 496.748 s，单 epoch 平均 49.675 s，各轮约 48.567～54.043 s，没有重新出现显存分页导致的数量级卡顿。按当前速度线性估计，400 epoch 约需 5.5 小时，实际时间会受验证、绘图、数据增强和 EarlyStopping 影响。
+
+### `best.pt` 独立 Val
+
+| 类别 | Mask P | Mask R | Mask mAP50 | Mask mAP50-95 |
+|---|---:|---:|---:|---:|
+| all | 0.548 | 0.532 | 0.535 | 0.257 |
+| Rice leaffolder | 0.510 | 0.512 | 0.496 | 0.210 |
+| Rice stemborers | 0.585 | 0.551 | 0.573 | 0.304 |
+
+整体 Box P/R/mAP50/mAP50-95 为 `0.547/0.568/0.568/0.333`。预测图中的小目标 Box 与实例 Mask 均非空、位置合理，没有发现 Mask 尺寸错位、全背景输出或类别链路异常。
+
+### 放行结论
+
+10 epoch 趋势预检通过，可以由用户手动启动 400 epoch 正式训练。该结论表示“当前实现值得进行完整训练”，不表示“P2 已经优于 Baseline”。
+
+由于正式 V2 必须使用 batch=4，它会被记录为 `formal-resource-adjusted`。最终论文若要求严格的单变量比较，需要补跑同一训练脚本、同一数据和同一 batch=4 的 Baseline，再比较 `Baseline-b4` 与 `V2-P2-b4`。
+
 ## 训练前检查清单
 
 - [x] 确认新 `v2-p2` 从 `main` 独立开始；
@@ -327,12 +395,12 @@ runs/segment/runs_seg/yolo26m_v2_p2_b4_preflight1_seg_20260730_015604
 - [x] P2-128 + batch=4 的无训练门禁与 dry-run 通过；
 - [x] 用户手动完成 P2-128、batch=4 的 1 epoch 资源预检；
 - [x] 确认 batch=4 不再发生严重显存分页；
-- [ ] 用户手动完成 10 epoch 短跑；
-- [ ] 确认 Box/Mask loss 与指标有正常学习趋势；
+- [x] 用户手动完成 10 epoch 短跑；
+- [x] 确认 Box/Mask loss 与指标有正常学习趋势；
 - [ ] 用户手动启动 400 epoch 正式训练；
 - [ ] 使用 `best.pt` 独立执行统一 `split=val`；
 - [ ] 记录整体与分类别 Mask P/R/AP。
 
 ## 结论边界
 
-目前可以得出“V2 功能链路正常，P2-128 + batch=4 已通过 1 epoch 功能与资源门禁”，仍不能得出“P2 优于 Baseline”或“可以直接用于论文结果”。下一步由用户手动完成 10 epoch 趋势预检，确认多轮 Box/Mask loss 与 val 指标走势后，才能决定是否进入 400 epoch。
+目前可以得出“V2 功能链路正常，P2-128 + batch=4 已通过 1 epoch 资源门禁和 10 epoch 趋势门禁”，仍不能提前得出“P2 优于 Baseline”。下一步允许用户手动启动 400 epoch；训练完成后必须使用 `best.pt` 做统一 `split=val`，再记录整体和分类别指标。
