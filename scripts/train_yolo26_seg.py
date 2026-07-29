@@ -12,6 +12,9 @@
 只检查、不训练：
     python scripts/train_yolo26_seg.py --experiment baseline --dry-run
 
+手动预检（非正式实验，只允许 1 或 10 epoch）：
+    python scripts/train_yolo26_seg.py --experiment v2-p2 ... --preflight-epochs 1
+
 未来自定义模型 YAML 示例：
     python scripts/train_yolo26_seg.py ^
         --experiment v2-p2 ^
@@ -85,6 +88,16 @@ def parse_args() -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="完成全部检查并构建模型，但不启动训练。",
+    )
+    parser.add_argument(
+        "--preflight-epochs",
+        type=int,
+        choices=(1, 10),
+        default=None,
+        help=(
+            "仅供用户手动启动的非正式预检训练，可选 1 或 10；除 epochs 外仍使用锁定 Baseline 参数。"
+            "不填写时为 400 epoch 正式实验。"
+        ),
     )
     return parser.parse_args()
 
@@ -240,7 +253,7 @@ def build_model(
     model_path: Path,
     pretrained_path: Path | None,
     baseline_weight_hash: str,
-) -> tuple[Any, str]:
+) -> tuple[Any, str, dict[str, Any] | None]:
     """构建 Baseline 或自定义 YAML 模型，不包含任何改进专用代码。"""
     if not model_path.is_file():
         raise FileNotFoundError(f"模型文件不存在：{model_path}")
@@ -264,10 +277,17 @@ def build_model(
 
     if getattr(model, "task", None) != "segment":
         raise RuntimeError(f"模型任务必须是 segment，实际为：{getattr(model, 'task', None)}")
-    return model, mode
+
+    head = model.model.model[-1]
+    transfer_report = getattr(head, "pretrained_transfer_report", None)
+    if getattr(head, "requires_pretrained_head_transfer", False) and not transfer_report:
+        raise RuntimeError(
+            f"{head.__class__.__name__} 要求语义化 Head 权重迁移，但没有生成迁移报告，已拒绝继续。"
+        )
+    return model, mode, transfer_report
 
 
-def make_run_name(experiment: str, custom_name: str | None) -> str:
+def make_run_name(experiment: str, custom_name: str | None, preflight_epochs: int | None = None) -> str:
     """生成可读、可追溯且不会覆盖旧实验的目录名。"""
     if custom_name:
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", custom_name):
@@ -277,8 +297,9 @@ def make_run_name(experiment: str, custom_name: str | None) -> str:
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", experiment):
         raise ValueError("--experiment 只能使用小写字母、数字、下划线和连字符。")
     tag = "" if experiment == "baseline" else f"_{experiment.replace('-', '_')}"
+    gate_tag = "" if preflight_epochs is None else f"_preflight{preflight_epochs}"
     timestamp = time.strftime("%Y%m%d_%H%M%S")
-    return f"yolo26m{tag}_seg_{timestamp}"
+    return f"yolo26m{tag}{gate_tag}_seg_{timestamp}"
 
 
 def print_summary(
@@ -295,10 +316,14 @@ def print_summary(
     branch: str,
     commit: str,
     package_file: Path,
+    transfer_report: dict[str, Any] | None,
+    run_kind: str,
+    profile_epochs: int,
 ) -> None:
     """在真正训练前完整显示公平对比信息。"""
     print("\n========== YOLO26 Fair Training Config ==========")
     print(f"Experiment       : {experiment}")
+    print(f"Run kind         : {run_kind}")
     print(f"Run name         : {run_name}")
     print(f"Model            : {model_path}")
     print(f"Model mode       : {model_mode}")
@@ -309,6 +334,11 @@ def print_summary(
     print(f"Git branch       : {branch}")
     print(f"Git commit       : {commit}")
     print(f"Ultralytics path : {package_file}")
+    if run_kind != "formal":
+        print(
+            f"[NOTICE] 非正式预检：锁定 profile 的 epochs={profile_epochs}，"
+            f"本次仅运行 epochs={train_args['epochs']}，结果不得写入正式对比表。"
+        )
     print("-------------------------------------------------")
     for key in (
         "imgsz",
@@ -325,6 +355,10 @@ def print_summary(
         "copy_paste",
     ):
         print(f"{key:17}: {train_args[key]}")
+    if transfer_report:
+        print("-------------------------------------------------")
+        print("Pretrained head transfer:")
+        print(json.dumps(transfer_report, ensure_ascii=False, indent=2))
     print("=================================================\n")
 
 
@@ -340,6 +374,10 @@ def write_manifest(
     train_hash: str,
     branch: str,
     commit: str,
+    transfer_report: dict[str, Any] | None,
+    run_kind: str,
+    profile_epochs: int,
+    effective_epochs: int,
 ) -> None:
     """将可复现信息写入原始 run；该目录由用户后续自行备份。"""
     manifest = {
@@ -354,6 +392,12 @@ def write_manifest(
         "dataset_yaml_sha256": profile["dataset_yaml_sha256"],
         "baseline_profile": profile["profile_id"],
         "train_args_sha256": train_hash,
+        "run_kind": run_kind,
+        "formal_comparison_eligible": run_kind == "formal",
+        "profile_epochs": profile_epochs,
+        "effective_epochs": effective_epochs,
+        "runtime_overrides": {} if run_kind == "formal" else {"epochs": effective_epochs},
+        "pretrained_head_transfer": transfer_report,
     }
     path = save_dir / "experiment_manifest.json"
     path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -365,9 +409,15 @@ def main() -> None:
     model_path = resolve_path(args.model)
     pretrained_path = resolve_path(args.pretrained) if args.pretrained else None
     data_path = resolve_path(args.data)
-    run_name = make_run_name(args.experiment, args.run_name)
 
     profile, train_args, train_hash = load_baseline_profile()
+    effective_train_args = dict(train_args)
+    run_kind = "formal"
+    if args.preflight_epochs is not None:
+        effective_train_args["epochs"] = args.preflight_epochs
+        run_kind = f"preflight-{args.preflight_epochs}-epoch"
+    run_name = make_run_name(args.experiment, args.run_name, args.preflight_epochs)
+
     branch, commit = verify_git_state(args.dry_run)
     yolo_class, version, package_file = verify_ultralytics_source()
 
@@ -378,7 +428,7 @@ def main() -> None:
         )
 
     verify_data_yaml(data_path, str(profile["dataset_yaml_sha256"]))
-    model, model_mode = build_model(
+    model, model_mode, transfer_report = build_model(
         yolo_class,
         model_path,
         pretrained_path,
@@ -393,11 +443,14 @@ def main() -> None:
         model_mode=model_mode,
         data_path=data_path,
         profile=profile,
-        train_args=train_args,
+        train_args=effective_train_args,
         train_hash=train_hash,
         branch=branch,
         commit=commit,
         package_file=package_file,
+        transfer_report=transfer_report,
+        run_kind=run_kind,
+        profile_epochs=int(train_args["epochs"]),
     )
 
     if args.dry_run:
@@ -406,10 +459,12 @@ def main() -> None:
         return
 
     # 复制后再加入运行时路径参数，避免修改从 profile 读取的锁定字典。
-    runtime_args = dict(train_args)
+    runtime_args = dict(effective_train_args)
     runtime_args.update(data=str(data_path), name=run_name)
-    results = model.train(**runtime_args)
-    save_dir = Path(results.save_dir).resolve()
+    model.train(**runtime_args)
+    if model.trainer is None or not getattr(model.trainer, "save_dir", None):
+        raise RuntimeError("训练结束后没有取得 trainer.save_dir，无法写入实验清单。")
+    save_dir = Path(model.trainer.save_dir).resolve()
 
     write_manifest(
         save_dir,
@@ -422,11 +477,17 @@ def main() -> None:
         train_hash=train_hash,
         branch=branch,
         commit=commit,
+        transfer_report=transfer_report,
+        run_kind=run_kind,
+        profile_epochs=int(train_args["epochs"]),
+        effective_epochs=int(effective_train_args["epochs"]),
     )
 
     best_path = save_dir / "weights" / "best.pt"
     print("\n[INFO] Training complete.")
     print(f"[INFO] Artifacts: {save_dir}")
+    if run_kind != "formal":
+        print("[NOTICE] 本次是非正式预检，只用于排错，不能写入 Baseline/V2 正式指标对比。")
     print("[INFO] 正式对比请使用 best.pt 单独执行 split=val：")
     print(f"  yolo segment val model=\"{best_path}\" data=\"{data_path}\" split=val")
 

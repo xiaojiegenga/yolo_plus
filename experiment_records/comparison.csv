@@ -1,6 +1,6 @@
 version,status,split,mask_p,mask_r,mask_map50,mask_map50_95,leaffolder_p,leaffolder_r,leaffolder_ap50,stemborers_p,stemborers_r,stemborers_ap50,git_branch,metric_source,notes
 baseline,completed,val,0.717,0.620,0.683,0.329,0.679,0.482,0.604,0.753,0.755,0.763,main,historical_record,待用统一 best.pt 独立 val 复核
 v1-cbam,completed,val,0.753,0.633,0.700,0.343,0.662,0.552,0.607,0.844,0.714,0.793,v1-cbam,historical_record,待用统一 best.pt 独立 val 复核
-v2-p2,not_started,val,,,,,,,,,,,v2-p2,not_available,新分支不继承旧 V2
+v2-p2,implementation_ready,val,,,,,,,,,,,v2-p2,pending_manual_preflight,最小P2源码及无训练门禁已完成；尚未启动任何epoch
 v3-dice,not_started,val,,,,,,,,,,,v3-dice,not_available,
 v4-combined,not_started,val,,,,,,,,,,,v4-combined,not_available,只组合已验证有效模块

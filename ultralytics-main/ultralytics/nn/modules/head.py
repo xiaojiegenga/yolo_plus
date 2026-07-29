@@ -27,6 +27,7 @@ __all__ = (
     "Pose",
     "RTDETRDecoder",
     "Segment",
+    "Segment26P2",
     "SemanticSegment",
     "YOLOEDetect",
     "YOLOESegment",
@@ -423,6 +424,167 @@ class Segment26(Segment):
         super().fuse()
         if hasattr(self.proto, "fuse"):
             self.proto.fuse()
+
+
+class Segment26P2(Segment26):
+    """YOLO26 P2 segmentation head with four detection scales and a standard P3-based mask prototype path.
+
+    The input feature order is ``(P2, P3, P4, P5)`` so strides remain monotonically ordered as ``(4, 8, 16, 32)``.
+    Box, class and mask-coefficient predictions use all four scales, while ``Proto26`` deliberately receives only
+    ``(P3, P4, P5)``. This keeps the mask prototype resolution and segmentation validation path identical to the
+    standard YOLO26 segmentation model.
+    """
+
+    requires_pretrained_head_transfer = True
+
+    def __init__(self, nc: int = 80, nm: int = 32, npr: int = 256, reg_max=16, end2end=False, ch: tuple = ()):
+        """Initialize the P2 segmentation head.
+
+        Args:
+            nc (int): Number of classes.
+            nm (int): Number of mask coefficients/prototypes.
+            npr (int): Number of intermediate prototype channels.
+            reg_max (int): Maximum number of DFL channels.
+            end2end (bool): Whether to use end-to-end NMS-free detection.
+            ch (tuple): Channels ordered as ``(P2, P3, P4, P5)``.
+        """
+        if len(ch) != 4:
+            raise ValueError(f"Segment26P2 expects four input scales (P2, P3, P4, P5), but received {len(ch)}.")
+
+        # Build the inherited heads from P3 first so their internal widths exactly match the baseline Segment26 head.
+        # The temporary module order is (P3, P4, P5, P2); it is immediately reordered to (P2, P3, P4, P5) below.
+        p2_ch, p3_ch, p4_ch, p5_ch = ch
+        super().__init__(nc, nm, npr, reg_max, end2end, (p3_ch, p4_ch, p5_ch, p2_ch))
+
+        self.cv2 = self._move_last_branch_first(self.cv2)
+        self.cv3 = self._move_last_branch_first(self.cv3)
+        self.cv4 = self._move_last_branch_first(self.cv4)
+        if end2end:
+            self.one2one_cv2 = self._move_last_branch_first(self.one2one_cv2)
+            self.one2one_cv3 = self._move_last_branch_first(self.one2one_cv3)
+            self.one2one_cv4 = self._move_last_branch_first(self.one2one_cv4)
+
+        # Keep the proven baseline Proto26 path: P3 is the base feature and only P3/P4/P5 participate in fusion.
+        self.proto = Proto26((p3_ch, p4_ch, p5_ch), self.npr, self.nm, nc)
+        self.proto_input_indices = (1, 2, 3)
+        self.pretrained_transfer_report = None
+
+    @staticmethod
+    def _move_last_branch_first(branches: nn.ModuleList) -> nn.ModuleList:
+        """Reorder branches from (P3, P4, P5, P2) to (P2, P3, P4, P5)."""
+        return nn.ModuleList([branches[-1], *list(branches[:-1])])
+
+    @staticmethod
+    def _copy_module_state(
+        target: nn.Module,
+        source: nn.Module,
+        label: str,
+        allowed_shape_mismatches: frozenset[str] = frozenset(),
+    ) -> tuple[int, list[str]]:
+        """Copy compatible tensors from a semantically matched module.
+
+        Classification-output tensors are allowed to differ when a COCO checkpoint (80 classes) initializes the
+        two-class rice-pest model. Every other missing key or shape mismatch remains a hard error so an architecture
+        mistake cannot be silently mistaken for successful pretrained transfer.
+        """
+        source_state = source.state_dict()
+        target_state = target.state_dict()
+        mismatched = {
+            key: (tuple(value.shape), tuple(target_state[key].shape) if key in target_state else None)
+            for key, value in source_state.items()
+            if key not in target_state or value.shape != target_state[key].shape
+        }
+        extra = sorted(set(target_state).difference(source_state))
+        unexpected_mismatches = {key: value for key, value in mismatched.items() if key not in allowed_shape_mismatches}
+        if unexpected_mismatches or extra:
+            raise RuntimeError(
+                f"Cannot transfer pretrained {label}: mismatched={unexpected_mismatches}, target_only={extra}."
+            )
+        compatible_state = {key: value for key, value in source_state.items() if key not in mismatched}
+        target.load_state_dict(compatible_state, strict=False)
+        return len(compatible_state), sorted(mismatched)
+
+    def load_pretrained_head(self, source_head: nn.Module) -> int:
+        """Transfer the baseline P3/P4/P5 segmentation head and Proto26 by semantic scale.
+
+        The new P2 branches intentionally keep their normal random initialization. This method is called through the
+        generic model-loading hook in ``BaseModel.load`` and avoids fragile top-level layer-index remapping.
+        """
+        if isinstance(source_head, Segment26P2):
+            # Same-layout loading is already handled by the normal state-dict intersection (e.g. trainer rebuild).
+            self.pretrained_transfer_report = {
+                "mode": "same-layout",
+                "source_head": source_head.__class__.__name__,
+                "branch_map": "exact state-dict keys",
+                "p2_initialization": "loaded from same-layout source",
+                "transferred_tensors": 0,
+            }
+            return 0
+        if not isinstance(source_head, Segment26) or source_head.nl != 3:
+            raise TypeError(
+                "Segment26P2 requires a three-scale Segment26 checkpoint for baseline initialization, "
+                f"but received {source_head.__class__.__name__} with nl={getattr(source_head, 'nl', None)}."
+            )
+
+        transferred = 0
+        skipped: list[str] = []
+        branch_names = ("cv2", "cv3", "cv4")
+        if self.end2end:
+            branch_names += ("one2one_cv2", "one2one_cv3", "one2one_cv4")
+
+        for branch_name in branch_names:
+            source_branches = getattr(source_head, branch_name)
+            target_branches = getattr(self, branch_name)
+            for source_idx, level in enumerate(("P3", "P4", "P5")):
+                target_idx = source_idx + 1  # target branch 0 is the new P2 scale
+                allowed = frozenset({"2.weight", "2.bias"}) if branch_name.endswith("cv3") else frozenset()
+                copied, skipped_keys = self._copy_module_state(
+                    target_branches[target_idx],
+                    source_branches[source_idx],
+                    f"{branch_name}.{level}",
+                    allowed_shape_mismatches=allowed,
+                )
+                transferred += copied
+                skipped.extend(f"{branch_name}.{level}.{key}" for key in skipped_keys)
+
+        copied, skipped_keys = self._copy_module_state(
+            self.proto,
+            source_head.proto,
+            "Proto26(P3,P4,P5)",
+            allowed_shape_mismatches=frozenset({"semseg.2.weight", "semseg.2.bias"}),
+        )
+        transferred += copied
+        skipped.extend(f"proto.{key}" for key in skipped_keys)
+        self.pretrained_transfer_report = {
+            "mode": "baseline-segment26-to-p2",
+            "source_head": source_head.__class__.__name__,
+            "branch_map": {"P3": "P3", "P4": "P4", "P5": "P5"},
+            "proto_map": "P3/P4/P5 -> P3/P4/P5",
+            "p2_initialization": "random (new neck and head branch)",
+            "transferred_tensors": transferred,
+            "skipped_class_output_tensors": skipped,
+        }
+        return transferred
+
+    def forward(self, x: list[torch.Tensor]) -> tuple | list[torch.Tensor] | dict[str, torch.Tensor]:
+        """Predict on P2-P5 while generating mask prototypes only from P3-P5."""
+        if len(x) != 4:
+            raise ValueError(f"Segment26P2 expects four feature tensors, but received {len(x)}.")
+
+        outputs = Detect.forward(self, x)
+        preds = outputs[1] if isinstance(outputs, tuple) else outputs
+        proto = self.proto([x[i] for i in self.proto_input_indices])
+        if isinstance(preds, dict):
+            if self.end2end:
+                preds["one2many"]["proto"] = proto
+                preds["one2one"]["proto"] = (
+                    tuple(p.detach() for p in proto) if isinstance(proto, tuple) else proto.detach()
+                )
+            else:
+                preds["proto"] = proto
+        if self.training:
+            return preds
+        return (outputs, proto) if self.export else ((outputs[0], proto), preds)
 
 
 class OBB(Detect):

@@ -66,6 +66,7 @@ from ultralytics.nn.modules import (
     SCDown,
     Segment,
     Segment26,
+    Segment26P2,
     SemanticSegment,
     TorchVision,
     WorldDetect,
@@ -319,6 +320,19 @@ class BaseModel(torch.nn.Module):
                 c1, c2 = min(c1, cc1), min(c2, cc2)
                 state_dict[first_conv][:c1, :c2] = csd[first_conv][:c1, :c2]
                 len_updated_csd += 1
+
+        custom_head_tensors = 0
+        target_head = self.model[-1] if len(self.model) else None
+        source_head = model.model[-1] if hasattr(model, "model") and len(model.model) else None
+        custom_head_loader = getattr(target_head, "load_pretrained_head", None)
+        if callable(custom_head_loader) and source_head is not None:
+            custom_head_tensors = custom_head_loader(source_head)
+            len_updated_csd += custom_head_tensors
+            if verbose and custom_head_tensors:
+                LOGGER.info(
+                    f"Semantically transferred {custom_head_tensors} head tensors "
+                    f"from {source_head.__class__.__name__} to {target_head.__class__.__name__}"
+                )
         if verbose:
             LOGGER.info(f"Transferred {len_updated_csd}/{len(self.model.state_dict())} items from pretrained weights")
 
@@ -1913,6 +1927,7 @@ def parse_model(d, ch, verbose=True):
                 YOLOEDetect,
                 Segment,
                 Segment26,
+                Segment26P2,
                 YOLOESegment,
                 YOLOESegment26,
                 Pose,
@@ -1922,9 +1937,21 @@ def parse_model(d, ch, verbose=True):
             }
         ):
             args.extend([reg_max, end2end, [ch[x] for x in f]])
-            if m is Segment or m is YOLOESegment or m is Segment26 or m is YOLOESegment26:
+            if m in {Segment, YOLOESegment, Segment26, Segment26P2, YOLOESegment26}:
                 args[2] = make_divisible(min(args[2], max_channels) * width, 8)
-            if m in {Detect, YOLOEDetect, Segment, Segment26, YOLOESegment, YOLOESegment26, Pose, Pose26, OBB, OBB26}:
+            if m in {
+                Detect,
+                YOLOEDetect,
+                Segment,
+                Segment26,
+                Segment26P2,
+                YOLOESegment,
+                YOLOESegment26,
+                Pose,
+                Pose26,
+                OBB,
+                OBB26,
+            }:
                 m.legacy = legacy
         elif m is SemanticSegment:
             args.append([ch[x] for x in f])  # nc, ch tuple
