@@ -465,9 +465,9 @@ class Segment26P2(Segment26):
             self.one2one_cv4 = self._move_last_branch_first(self.one2one_cv4)
 
         # The inherited class-head width is derived from P3 (256 channels for YOLO26m), which is appropriate for
-        # P3/P4/P5 but unnecessarily expensive on the 160x160 P2 map. Keep the three pretrained baseline branches
-        # unchanged and replace only the new P2 class branch with a 64-channel depthwise-separable branch.
-        self.p2_cls_hidden = 64
+        # P3/P4/P5 but unnecessarily wide for the 128-channel P2 feature. Keep the three pretrained baseline branches
+        # unchanged and make only the new P2 class branch proportional to its own input width (128 for YOLO26m).
+        self.p2_cls_hidden = p2_ch
         self.cv3[0] = self._make_p2_class_branch(p2_ch, self.p2_cls_hidden, nc)
         if end2end:
             self.one2one_cv3[0] = copy.deepcopy(self.cv3[0])
