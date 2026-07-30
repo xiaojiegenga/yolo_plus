@@ -5,7 +5,7 @@
 2. 改进实验默认只允许改变模型源码/模型 YAML 和实验名称；
 3. 在正式训练前检查源码路径、数据、权重、Git 状态和配置指纹；
 4. 不在本脚本中混入 CBAM、P2、Dice 等版本专用实现。
-5. 为配对显存实验，只允许显式使用 batch=4 覆盖，并完整记录唯一参数差异。
+5. 为 batch=4 配对实验，只允许显式使用 batch=4 覆盖，并完整记录唯一参数差异。
 
 正式训练示例：
     python scripts/train_yolo26_seg.py --experiment baseline
@@ -15,6 +15,9 @@ Baseline-b4 配对实验：
 
 只检查、不训练：
     python scripts/train_yolo26_seg.py --experiment baseline-b4 --batch 4 --dry-run
+
+用户手动预检（非正式，只允许 1 或 10 epoch）：
+    python scripts/train_yolo26_seg.py --experiment v3-dice --batch 4 --preflight-epochs 1
 
 未来自定义模型 YAML 示例：
     python scripts/train_yolo26_seg.py ^
@@ -56,7 +59,7 @@ EXPECTED_DATASET_YAML_SHA256 = "75996638EB9BBAED8B80D0413FFD57B374C0024B2C9F9EF5
 
 
 def parse_args() -> argparse.Namespace:
-    """解析模型身份、路径和受控的 batch=4 资源覆盖。"""
+    """解析模型身份、路径和受控的预检/资源覆盖参数。"""
     parser = argparse.ArgumentParser(
         description="使用锁定的 Baseline 参数训练 YOLO26m-seg 或其单项改进模型。"
     )
@@ -91,12 +94,22 @@ def parse_args() -> argparse.Namespace:
         help="完成全部检查并构建模型，但不启动训练。",
     )
     parser.add_argument(
+        "--preflight-epochs",
+        type=int,
+        choices=(1, 10),
+        default=None,
+        help=(
+            "仅供用户手动启动的非正式预检训练，可选 1 或 10；除 epochs 外仍使用锁定 Baseline 参数。"
+            "不填写时为 400 epoch 正式实验。"
+        ),
+    )
+    parser.add_argument(
         "--batch",
         type=int,
         choices=(4,),
         default=None,
         help=(
-            "显式将锁定 profile 的 batch=8 覆盖为 4；只用于与 V2-P2-b4 配对。"
+            "显式将锁定 profile 的 batch=8 覆盖为 4；只用于同为 batch=4 的配对实验。"
             "该差异会写入运行名、控制台摘要和 experiment_manifest.json。"
         ),
     )
@@ -281,13 +294,23 @@ def build_model(
     return model, mode
 
 
-def make_run_name(experiment: str, custom_name: str | None, batch_override: int | None = None) -> str:
+def make_run_name(
+    experiment: str,
+    custom_name: str | None,
+    preflight_epochs: int | None = None,
+    batch_override: int | None = None,
+) -> str:
     """生成可读、可追溯且不会覆盖旧实验的目录名。"""
     if custom_name:
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", custom_name):
             raise ValueError("--run-name 只能包含字母、数字、点、下划线和连字符。")
         if batch_override is not None and f"b{batch_override}" not in custom_name.lower():
             raise ValueError(f"使用 --batch {batch_override} 时，自定义 --run-name 必须包含 b{batch_override}。")
+        if preflight_epochs is not None and f"preflight{preflight_epochs}" not in custom_name.lower():
+            raise ValueError(
+                f"使用 --preflight-epochs {preflight_epochs} 时，自定义 --run-name "
+                f"必须包含 preflight{preflight_epochs}。"
+            )
         return custom_name
 
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", experiment):
@@ -296,8 +319,9 @@ def make_run_name(experiment: str, custom_name: str | None, batch_override: int 
     batch_tag = ""
     if batch_override is not None and f"b{batch_override}" not in tag:
         batch_tag = f"_b{batch_override}"
+    gate_tag = "" if preflight_epochs is None else f"_preflight{preflight_epochs}"
     timestamp = time.strftime("%Y%m%d_%H%M%S")
-    return f"yolo26m{tag}{batch_tag}_seg_{timestamp}"
+    return f"yolo26m{tag}{batch_tag}{gate_tag}_seg_{timestamp}"
 
 
 def print_summary(
@@ -313,6 +337,7 @@ def print_summary(
     train_hash: str,
     effective_train_hash: str,
     runtime_overrides: dict[str, Any],
+    run_kind: str,
     branch: str,
     commit: str,
     package_file: Path,
@@ -320,6 +345,7 @@ def print_summary(
     """在真正训练前完整显示公平对比信息。"""
     print("\n========== YOLO26 Fair Training Config ==========")
     print(f"Experiment       : {experiment}")
+    print(f"Run kind         : {run_kind}")
     print(f"Run name         : {run_name}")
     print(f"Model            : {model_path}")
     print(f"Model mode       : {model_mode}")
@@ -331,6 +357,11 @@ def print_summary(
     print(f"Git branch       : {branch}")
     print(f"Git commit       : {commit}")
     print(f"Ultralytics path : {package_file}")
+    if run_kind.startswith("preflight-"):
+        print(
+            f"[NOTICE] 非正式预检：锁定 profile 的 epochs={profile['train']['epochs']}，"
+            f"本次仅运行 epochs={train_args['epochs']}，结果不得写入正式对比表。"
+        )
     if "batch" in runtime_overrides:
         print(
             f"[NOTICE] 配对资源覆盖：batch={profile['train']['batch']} → {train_args['batch']}。"
@@ -367,6 +398,7 @@ def write_manifest(
     train_hash: str,
     effective_train_hash: str,
     runtime_overrides: dict[str, Any],
+    run_kind: str,
     branch: str,
     commit: str,
 ) -> None:
@@ -384,11 +416,12 @@ def write_manifest(
         "baseline_profile": profile["profile_id"],
         "train_args_sha256": train_hash,
         "effective_train_args_sha256": effective_train_hash,
-        "run_kind": "formal-resource-adjusted" if runtime_overrides else "formal",
-        "formal_comparison_eligible": not runtime_overrides,
+        "run_kind": run_kind,
+        "formal_comparison_eligible": run_kind == "formal",
+        "paired_comparison_eligible": run_kind == "formal-resource-adjusted",
         "paired_comparison_group": "batch4" if runtime_overrides.get("batch") == 4 else None,
         "profile_epochs": int(profile["train"]["epochs"]),
-        "effective_epochs": int(profile["train"]["epochs"]),
+        "effective_epochs": int(runtime_overrides.get("epochs", profile["train"]["epochs"])),
         "profile_batch": int(profile["train"]["batch"]),
         "effective_batch": int(runtime_overrides.get("batch", profile["train"]["batch"])),
         "runtime_overrides": runtime_overrides,
@@ -407,11 +440,18 @@ def main() -> None:
     profile, train_args, train_hash = load_baseline_profile()
     effective_train_args = dict(train_args)
     runtime_overrides: dict[str, Any] = {}
+    run_kind = "formal"
+    if args.preflight_epochs is not None:
+        effective_train_args["epochs"] = args.preflight_epochs
+        runtime_overrides["epochs"] = args.preflight_epochs
+        run_kind = f"preflight-{args.preflight_epochs}-epoch"
     if args.batch is not None:
         effective_train_args["batch"] = args.batch
         runtime_overrides["batch"] = args.batch
+        if args.preflight_epochs is None:
+            run_kind = "formal-resource-adjusted"
     effective_train_hash = canonical_hash(effective_train_args)
-    run_name = make_run_name(args.experiment, args.run_name, args.batch)
+    run_name = make_run_name(args.experiment, args.run_name, args.preflight_epochs, args.batch)
 
     branch, commit = verify_git_state(args.dry_run)
     yolo_class, version, package_file = verify_ultralytics_source()
@@ -442,6 +482,7 @@ def main() -> None:
         train_hash=train_hash,
         effective_train_hash=effective_train_hash,
         runtime_overrides=runtime_overrides,
+        run_kind=run_kind,
         branch=branch,
         commit=commit,
         package_file=package_file,
@@ -469,6 +510,7 @@ def main() -> None:
         train_hash=train_hash,
         effective_train_hash=effective_train_hash,
         runtime_overrides=runtime_overrides,
+        run_kind=run_kind,
         branch=branch,
         commit=commit,
     )
@@ -476,8 +518,10 @@ def main() -> None:
     best_path = save_dir / "weights" / "best.pt"
     print("\n[INFO] Training complete.")
     print(f"[INFO] Artifacts: {save_dir}")
-    if runtime_overrides:
-        print("[NOTICE] 本次是 batch=4 配对 Baseline，仅与同为 batch=4 的改进实验作严格比较。")
+    if run_kind.startswith("preflight-"):
+        print("[NOTICE] 本次是非正式预检，只用于排错，不能写入正式指标对比表。")
+    elif run_kind == "formal-resource-adjusted":
+        print("[NOTICE] 本次是 batch=4 配对实验，仅与同软件版本、同为 batch=4 的实验作严格比较。")
     print("[INFO] 正式对比请使用 best.pt 单独执行 split=val：")
     print(f"  yolo segment val model=\"{best_path}\" data=\"{data_path}\" split=val")
 

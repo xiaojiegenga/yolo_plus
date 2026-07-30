@@ -483,6 +483,9 @@ class v8DetectionLoss:
 class v8SegmentationLoss(v8DetectionLoss):
     """Criterion class for computing training losses for YOLOv8 segmentation."""
 
+    INSTANCE_DICE_GAIN = 0.5
+    INSTANCE_DICE_SMOOTH = 1.0
+
     def __init__(
         self, model: torch.nn.Module, tal_topk: int = 10, tal_topk2: int | None = None
     ):  # model must be de-paralleled
@@ -552,28 +555,76 @@ class v8SegmentationLoss(v8DetectionLoss):
         return loss * batch_size, loss.detach()  # loss(box, seg, cls, dfl, semantic)
 
     @staticmethod
-    def single_mask_loss(
-        gt_mask: torch.Tensor, pred: torch.Tensor, proto: torch.Tensor, xyxy: torch.Tensor, area: torch.Tensor
+    def instance_mask_dice_loss(
+        pred_mask: torch.Tensor,
+        gt_mask: torch.Tensor,
+        xyxy: torch.Tensor,
+        smooth: float = 1.0,
     ) -> torch.Tensor:
-        """Compute the instance segmentation loss for a single image.
+        """Compute one soft Dice loss value per matched instance inside its target box.
+
+        Args:
+            pred_mask (torch.Tensor): Predicted mask logits of shape (N, H, W).
+            gt_mask (torch.Tensor): Binary ground-truth masks of shape (N, H, W).
+            xyxy (torch.Tensor): Target boxes in mask-space xyxy coordinates, shape (N, 4).
+            smooth (float): Additive smoothing term that prevents division by zero.
+
+        Returns:
+            (torch.Tensor): Per-instance Dice losses of shape (N,).
+
+        Notes:
+            BCEWithLogits must consume logits, while Dice must consume probabilities. Both prediction and target are
+            cropped to the same target box so the new term follows the spatial scope of the original BCE mask loss.
+            A non-inplace vectorized box mask is used here because ``crop_mask`` modifies tensors in place on its
+            small-CPU-input path, which would invalidate the Sigmoid tensor required for backward.
+        """
+        pred_probability = pred_mask.float().sigmoid()
+        boxes = xyxy.to(device=pred_probability.device, dtype=pred_probability.dtype)
+        _, mask_h, mask_w = pred_probability.shape
+        x1, y1, x2, y2 = torch.chunk(boxes[:, :, None], 4, dim=1)
+        rows = torch.arange(mask_w, device=pred_probability.device, dtype=boxes.dtype)[None, None, :]
+        cols = torch.arange(mask_h, device=pred_probability.device, dtype=boxes.dtype)[None, :, None]
+        inside_box = (rows >= x1) & (rows < x2) & (cols >= y1) & (cols < y2)
+        pred_probability = pred_probability * inside_box
+        target = gt_mask.float() * inside_box
+        intersection = (pred_probability * target).sum(dim=(1, 2))
+        denominator = pred_probability.sum(dim=(1, 2)) + target.sum(dim=(1, 2))
+        return 1.0 - (2.0 * intersection + smooth) / (denominator + smooth)
+
+    @staticmethod
+    def single_mask_loss(
+        gt_mask: torch.Tensor,
+        pred: torch.Tensor,
+        proto: torch.Tensor,
+        xyxy: torch.Tensor,
+        area: torch.Tensor,
+        dice_gain: float = 0.5,
+        dice_smooth: float = 1.0,
+    ) -> torch.Tensor:
+        """Compute BCE plus soft Dice instance segmentation loss for a single image.
 
         Args:
             gt_mask (torch.Tensor): Ground truth mask of shape (N, H, W), where N is the number of objects.
             pred (torch.Tensor): Predicted mask coefficients of shape (N, 32).
             proto (torch.Tensor): Prototype masks of shape (32, H, W).
-            xyxy (torch.Tensor): Ground truth bounding boxes in xyxy format, normalized to [0, 1], of shape (N, 4).
-            area (torch.Tensor): Area of each ground truth bounding box of shape (N,).
+            xyxy (torch.Tensor): Target boxes in mask-space xyxy coordinates, shape (N, 4).
+            area (torch.Tensor): Normalized area of each target box, shape (N,).
+            dice_gain (float): Relative gain applied to the soft Dice term. Set to 0 for legacy BCE-only behavior.
+            dice_smooth (float): Additive smoothing term used by soft Dice.
 
         Returns:
             (torch.Tensor): The calculated mask loss for a single image.
 
         Notes:
             The function uses the equation pred_mask = torch.einsum('in,nhw->ihw', pred, proto) to produce the
-            predicted masks from the prototype masks and predicted mask coefficients.
+            predicted masks from the prototype masks and predicted mask coefficients. The original area-normalized BCE
+            path is preserved exactly; Dice adds region-level overlap supervision without changing inference.
         """
         pred_mask = torch.einsum("in,nhw->ihw", pred, proto)  # (n, 32) @ (32, 80, 80) -> (n, 80, 80)
-        loss = F.binary_cross_entropy_with_logits(pred_mask, gt_mask, reduction="none")
-        return (crop_mask(loss, xyxy).mean(dim=(1, 2)) / area).sum()
+        bce_loss = F.binary_cross_entropy_with_logits(pred_mask, gt_mask, reduction="none")
+        bce_loss = crop_mask(bce_loss, xyxy).mean(dim=(1, 2)) / area
+        dice_loss = v8SegmentationLoss.instance_mask_dice_loss(pred_mask, gt_mask, xyxy, smooth=dice_smooth)
+        return (bce_loss + dice_gain * dice_loss).sum()
 
     def calculate_segmentation_loss(
         self,
@@ -629,7 +680,13 @@ class v8SegmentationLoss(v8DetectionLoss):
                     gt_mask = masks[batch_idx.view(-1) == i][mask_idx]
 
                 loss += self.single_mask_loss(
-                    gt_mask, pred_masks_i[fg_mask_i], proto_i, mxyxy_i[fg_mask_i], marea_i[fg_mask_i]
+                    gt_mask,
+                    pred_masks_i[fg_mask_i],
+                    proto_i,
+                    mxyxy_i[fg_mask_i],
+                    marea_i[fg_mask_i],
+                    dice_gain=self.INSTANCE_DICE_GAIN,
+                    dice_smooth=self.INSTANCE_DICE_SMOOTH,
                 )
 
             # WARNING: lines below prevents Multi-GPU DDP 'unused gradient' PyTorch errors, do not remove
