@@ -375,6 +375,95 @@ epoch 2～3 的 mAP 暂时回落发生在 `warmup_epochs=5` 的预热阶段。ep
 
 由于正式 V2 必须使用 batch=4，它会被记录为 `formal-resource-adjusted`。最终论文若要求严格的单变量比较，需要补跑同一训练脚本、同一数据和同一 batch=4 的 Baseline，再比较 `Baseline-b4` 与 `V2-P2-b4`。
 
+## 2026-07-30：正式训练完成
+
+### 运行身份
+
+```text
+runs/segment/runs_seg/yolo26m_v2_p2_b4_seg_20260730_022727
+```
+
+| 项目 | 记录 |
+|---|---|
+| Git branch / commit | `v2-p2` / `3e00818505c191abbc6136eb38d9ed5dfa0da966` |
+| Run kind | `formal-resource-adjusted` |
+| Profile / Effective batch | `8 / 4` |
+| 计划 epoch | 400 |
+| 实际 epoch | 339，EarlyStopping |
+| Best epoch | 239 |
+| Patience | 100 |
+| 总训练时间 | 4.553 h |
+| Effective SHA256 | `5A90247FF46C3D0A38BC4A16714CA1A7C75BD038042CD37DD70FB63B7DD5F917` |
+| `best.pt` SHA256 | `9734323191B866702544AF7516F4645A745BCCE49700834FC81C111004633AF7` |
+| `last.pt` SHA256 | `16D8DD08F0873699E09496BBB62DD25900DFB4C3CB59AE76D38F39FB01814F83` |
+| `results.csv` SHA256 | `E5068465E6CB3D824209856C284404ED156041AA6B4F9B045934AFCFD0B4B542` |
+| Manifest SHA256 | `DDC07FB65B4680082345F4118C90FA6D5E5289ABF4A280E59F6C5D962A3F4599` |
+| `best.pt` 文件大小 | 56.03 MB（十进制）/ 53.44 MiB |
+
+模型复杂度记录：
+
+| 统计阶段 | Params | FLOPs@640 |
+|---|---:|---:|
+| 未融合、实际 2 类训练结构 | 27,628,722 | 165.728 G |
+| 最终加载 `best.pt` 的 fused inference summary | 23,904,312 | 141.4 G |
+
+论文比较时必须对所有模型使用同一种统计方式，不能把 Baseline 的未融合统计与 V2 的 fused 统计混用。
+
+### 数据质量与训练健康检查
+
+- `results.csv` 含 epoch 1～339，共 339 行，无缺失 epoch；
+- 全部数值字段中 NaN/Inf 数量为 0；
+- manifest 的源码 commit、权重哈希、数据集哈希、batch 覆盖和训练 profile 均匹配；
+- epoch 239 后连续 100 epoch 没有出现更高综合 fitness，因此在 epoch 339 正常 EarlyStopping；
+- 平均 48.35 s/epoch，中位数 47.91 s/epoch，没有显存分页导致的异常慢速；
+- train 五项 loss 持续下降；val loss 在约 180～270 epoch 后进入平台并轻微波动，属于轻度过拟合/收敛平台，不是发散；
+- 预测图中的 Box 和 Mask 非空、空间位置正常；
+- 归一化混淆矩阵未显示卷叶螟与钻心虫互相混淆，主要错误仍是目标与背景之间的漏检/误检。
+
+EarlyStopping 使用的分割模型 fitness 为：
+
+```text
+Box mAP50-95 + Mask mAP50-95
+```
+
+epoch 239 的 fitness 为 `0.42187 + 0.33525 = 0.75712`，是全部 339 个 epoch 中最高值，因此 `best.pt` 选择正确。虽然 Mask mAP50 在 epoch 246 达到单项最高 `0.68365`，但该轮综合 fitness 为 `0.75178`，低于 epoch 239。正式使用必须选择 `best.pt`，不能使用 `last.pt`，也不需要恢复训练或增大 patience。
+
+### `best.pt` 最终 Val
+
+| 类别 | Images | Instances | Box P | Box R | Box mAP50 | Box mAP50-95 | Mask P | Mask R | Mask mAP50 | Mask mAP50-95 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| all | 95 | 330 | 0.636 | 0.616 | 0.678 | 0.421 | 0.650 | 0.624 | 0.682 | 0.335 |
+| Rice leaffolder | 66 | 281 | 0.624 | 0.498 | 0.580 | 0.322 | 0.650 | 0.512 | 0.589 | 0.264 |
+| Rice stemborers | 32 | 49 | 0.648 | 0.735 | 0.776 | 0.519 | 0.650 | 0.735 | 0.775 | 0.406 |
+
+以上数值来自训练结束后重新加载 `best.pt` 执行的 `split=val`，不是 `last.pt` 或单纯读取最后一行 CSV。轻量结构化指标另存于 `val_metrics.csv`。
+
+### 与历史 Baseline、V1 的暂定比较
+
+> 注意：Baseline/V1 使用 batch=8，V2 使用 batch=4。下表只用于判断研究方向，不具备严格单变量因果解释；正式论文结论需等待 `Baseline-b4`。
+
+| Mask 指标 | Baseline 历史值 | V1 CBAM 历史值 | V2 P2-b4 | V2 - Baseline |
+|---|---:|---:|---:|---:|
+| Overall P | 0.717 | 0.753 | 0.650 | -0.067 |
+| Overall R | 0.620 | 0.633 | 0.624 | +0.004 |
+| Overall mAP50 | 0.683 | 0.700 | 0.682 | -0.001 |
+| Overall mAP50-95 | 0.329 | 0.343 | 0.335 | +0.006 |
+| Leaffolder P | 0.679 | 0.662 | 0.650 | -0.029 |
+| Leaffolder R | 0.482 | 0.552 | 0.512 | +0.030 |
+| Leaffolder AP50 | 0.604 | 0.607 | 0.589 | -0.015 |
+| Stemborers P | 0.753 | 0.844 | 0.650 | -0.103 |
+| Stemborers R | 0.755 | 0.714 | 0.735 | -0.020 |
+| Stemborers AP50 | 0.763 | 0.793 | 0.775 | +0.012 |
+
+### 阶段结论
+
+1. **代码和训练有效**：无 Mask 崩溃、NaN、坐标错位或类别混淆，V2 是可复现的有效实验。
+2. **总体性能基本持平**：Mask mAP50 与历史 Baseline 相差 `-0.001`，mAP50-95 暂时高 `+0.006`，都属于很小差异。
+3. **卷叶螟召回小幅改善但代价明显**：Recall 提高 `+0.030`，但 Precision 降低 `-0.029`、AP50 降低 `-0.015`。P2 产生了更多小目标候选，同时也增加了误检或低质量 Mask，未实现预期的大幅提升。
+4. **当前 V1 仍优于 V2**：按历史值，V1 在整体 mAP、卷叶螟 Recall 和 AP50 上均更好。
+5. **P2 单独使用收益有限**：它可以作为后续组合实验中的候选模块，但不能据当前结果声称“P2 显著提升模型”。
+6. **下一项必要对照是 Baseline-b4**：V2 与历史 Baseline 的差异很小，batch 不一致足以影响结论。补跑 Baseline-b4 后，才能判断这些差异究竟来自 P2 还是 micro-batch。
+
 ## 训练前检查清单
 
 - [x] 确认新 `v2-p2` 从 `main` 独立开始；
@@ -397,10 +486,10 @@ epoch 2～3 的 mAP 暂时回落发生在 `warmup_epochs=5` 的预热阶段。ep
 - [x] 确认 batch=4 不再发生严重显存分页；
 - [x] 用户手动完成 10 epoch 短跑；
 - [x] 确认 Box/Mask loss 与指标有正常学习趋势；
-- [ ] 用户手动启动 400 epoch 正式训练；
-- [ ] 使用 `best.pt` 独立执行统一 `split=val`；
-- [ ] 记录整体与分类别 Mask P/R/AP。
+- [x] 用户手动启动 400 epoch 正式训练；
+- [x] 使用 `best.pt` 执行训练结束后的独立 `split=val`；
+- [x] 记录整体与分类别 Mask P/R/AP。
 
 ## 结论边界
 
-目前可以得出“V2 功能链路正常，P2-128 + batch=4 已通过 1 epoch 资源门禁和 10 epoch 趋势门禁”，仍不能提前得出“P2 优于 Baseline”。下一步允许用户手动启动 400 epoch；训练完成后必须使用 `best.pt` 做统一 `split=val`，再记录整体和分类别指标。
+V2-P2 正式训练已经完成，代码与训练链路有效，但与历史 batch=8 Baseline 相比只表现为“整体基本持平、卷叶螟 Recall 小幅提高、Precision/AP50 有所下降”。该结果应记录为收益有限的独立模块实验。严格结论仍需补跑 `Baseline-b4`，随后再决定 P2 是否进入 V4 组合。
