@@ -5,7 +5,8 @@
 - Git 分支：`v3-dice`
 - 源码实现 commit：`48229707ad39596feb8bf96efd6e7fcd8c1c37e5`
 - 1 epoch 预检 commit：`0ee29b9d7e51bc8f016b0e3069cfd9b20f70ccf8`
-- 状态：1 epoch 预检通过，等待用户手动执行 10 epoch 趋势预检
+- 10 epoch 预检 commit：`525b304c64bf13d5a2e29f3ddc3be2095622fb6c`
+- 状态：1/10 epoch 预检均通过，可以由用户手动执行 400 epoch 正式训练
 - 严格对比对象：`Baseline-b4`
 - 最终指标来源：统一 `split=val`
 
@@ -210,6 +211,108 @@ Baseline 判断“越低越好”。首轮 Seg Loss 增大约 42% 表明 Dice �
 - run 与 manifest 正确标记为非正式预检。
 
 因此可以进入用户手动 10 epoch 趋势预检，但仍不能进入正式指标表。
+
+## 10 epoch 趋势预检结果
+
+用户于 2026-07-31 手动完成：
+
+```text
+runs/segment/runs_seg/yolo26m_v3_dice_b4_preflight10_seg_20260731_013539
+```
+
+### 身份与产物
+
+```text
+run_kind                  = preflight-10-epoch
+formal_comparison_eligible= false
+paired_comparison_group   = batch4
+git commit                = 525b304c64bf13d5a2e29f3ddc3be2095622fb6c
+effective SHA256          = F5BAF9E12F49E378AC9B0D3FE004A774BFC795F3EAFBA31A3D3B5D753F02B5BF
+epochs / batch / imgsz    = 10 / 4 / 640
+```
+
+- `results.csv` 共 10 行，epoch 1～10 连续；
+- 第 1 行与独立 1 epoch 预检逐值一致，证明固定 seed 下可以复现；
+- `best.pt` 和 `last.pt` 均正常生成；
+- `best.pt` SHA256：
+  `F68EB5CDAF120FD3D1734F29054DC115A4463DA874BDF45BBFA9EA862C01B0B6`；
+- `best.pt` 共 904 个状态张量，NaN/Inf 张量数为 0；
+- 总耗时 0.124 h，约 7.44 min。
+
+### 训练趋势
+
+| 指标 | Epoch 1 | Epoch 10 | 变化 |
+|---|---:|---:|---:|
+| train Box Loss | 2.00836 | 1.55965 | -22.34% |
+| train Seg Loss | 3.56231 | 2.02351 | -43.20% |
+| train Cls Loss | 4.08889 | 1.79118 | -56.19% |
+| train DFL Loss | 0.00886 | 0.00617 | -30.36% |
+| train Semantic Loss | 4.36299 | 1.47296 | -66.24% |
+| Box mAP50 | 0.39981 | 0.62141 | +0.22160 |
+| Box mAP50-95 | 0.20717 | 0.37396 | +0.16679 |
+| Mask mAP50 | 0.41760 | 0.61392 | +0.19632 |
+| Mask mAP50-95 | 0.17292 | 0.29936 | +0.12644 |
+
+训练 Loss 整体下降，Box/Mask 指标在早期波动后明显恢复并在 epoch 10 达到本次最高值。
+这表明 BCE + Dice 没有造成梯度冲突、Mask 崩溃或 Box 分支异常退化。
+
+最终 `best.pt` 独立验证：
+
+| 类别 | Mask P | Mask R | Mask mAP50 | Mask mAP50-95 |
+|---|---:|---:|---:|---:|
+| all | 0.573 | 0.599 | 0.614 | 0.299 |
+| Rice leaffolder | 0.646 | 0.463 | 0.547 | 0.229 |
+| Rice stemborers | 0.499 | 0.735 | 0.680 | 0.369 |
+
+这些仍然是预检指标，不得写入正式对比表。
+
+### 与 Baseline-b4 第 10 epoch 的排错对齐
+
+| 指标 | Baseline-b4 epoch 10 | V3 epoch 10 | 差值 |
+|---|---:|---:|---:|
+| Mask P | 0.42594 | 0.57893 | +0.15299 |
+| Mask R | 0.50980 | 0.58415 | +0.07435 |
+| Mask mAP50 | 0.43671 | 0.61392 | +0.17721 |
+| Mask mAP50-95 | 0.18580 | 0.29936 | +0.11356 |
+| Box mAP50 | 0.42445 | 0.62141 | +0.19696 |
+| Box mAP50-95 | 0.23074 | 0.37396 | +0.14322 |
+
+该早期差值说明 V3 的学习趋势值得继续，但 10 epoch 仍处于 warmup 后的早期阶段，
+不能替代完整训练，也不能据此宣称最终性能提升。
+
+### 训练期 Val Loss 的已知 NaN
+
+epoch 3 出现：
+
+```text
+val/seg_loss = nan
+val/cls_loss = nan
+```
+
+但以下关键数据全部有限：
+
+- 10 轮 `train/*_loss`；
+- 10 轮全部 Box/Mask P、R、mAP；
+- epoch 3 的 Box/Mask 指标；
+- `best.pt` 的 904 个状态张量；
+- 最终独立验证结果。
+
+Baseline-b4 在相同 YOLO26 8.4.80 验证损失路径中也出现该现象：370 轮中有 122 轮
+存在一个或多个 `val/*_loss=nan`，但 `train/*`、`metrics/*` 和最终 checkpoint 均有限。
+模型选优 fitness 为：
+
+```text
+Box mAP50-95 + Mask mAP50-95
+```
+
+并不使用 `val/seg_loss` 或 `val/cls_loss`。因此这是同版本 Baseline 已存在的训练期
+Val Loss 诊断异常，不是 V3 Dice 独有的数值崩溃，不阻止正式训练。但论文中不得使用
+这些含 NaN 的 Val Loss 曲线进行优劣比较。
+
+### 趋势预检结论
+
+10 epoch 门禁通过，可以放行用户手动执行 400 epoch 正式训练。正式训练前不再修改
+Loss、模型结构或训练参数。
 
 ## 用户手动命令
 
