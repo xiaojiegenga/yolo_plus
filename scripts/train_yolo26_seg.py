@@ -2,15 +2,19 @@
 
 设计目标：
 1. Baseline 和所有单项改进共用同一份训练参数；
-2. 改进实验只允许改变模型源码/模型 YAML 和实验名称；
+2. 改进实验默认只允许改变模型源码/模型 YAML 和实验名称；
 3. 在正式训练前检查源码路径、数据、权重、Git 状态和配置指纹；
 4. 不在本脚本中混入 CBAM、P2、Dice 等版本专用实现。
+5. 为配对显存实验，只允许显式使用 batch=4 覆盖，并完整记录唯一参数差异。
 
 正式训练示例：
     python scripts/train_yolo26_seg.py --experiment baseline
 
+Baseline-b4 配对实验：
+    python scripts/train_yolo26_seg.py --experiment baseline-b4 --batch 4
+
 只检查、不训练：
-    python scripts/train_yolo26_seg.py --experiment baseline --dry-run
+    python scripts/train_yolo26_seg.py --experiment baseline-b4 --batch 4 --dry-run
 
 未来自定义模型 YAML 示例：
     python scripts/train_yolo26_seg.py ^
@@ -52,7 +56,7 @@ EXPECTED_DATASET_YAML_SHA256 = "75996638EB9BBAED8B80D0413FFD57B374C0024B2C9F9EF5
 
 
 def parse_args() -> argparse.Namespace:
-    """解析只影响模型身份和文件路径的参数，不开放训练超参数覆盖。"""
+    """解析模型身份、路径和受控的 batch=4 资源覆盖。"""
     parser = argparse.ArgumentParser(
         description="使用锁定的 Baseline 参数训练 YOLO26m-seg 或其单项改进模型。"
     )
@@ -85,6 +89,16 @@ def parse_args() -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="完成全部检查并构建模型，但不启动训练。",
+    )
+    parser.add_argument(
+        "--batch",
+        type=int,
+        choices=(4,),
+        default=None,
+        help=(
+            "显式将锁定 profile 的 batch=8 覆盖为 4；只用于与 V2-P2-b4 配对。"
+            "该差异会写入运行名、控制台摘要和 experiment_manifest.json。"
+        ),
     )
     return parser.parse_args()
 
@@ -267,18 +281,23 @@ def build_model(
     return model, mode
 
 
-def make_run_name(experiment: str, custom_name: str | None) -> str:
+def make_run_name(experiment: str, custom_name: str | None, batch_override: int | None = None) -> str:
     """生成可读、可追溯且不会覆盖旧实验的目录名。"""
     if custom_name:
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", custom_name):
             raise ValueError("--run-name 只能包含字母、数字、点、下划线和连字符。")
+        if batch_override is not None and f"b{batch_override}" not in custom_name.lower():
+            raise ValueError(f"使用 --batch {batch_override} 时，自定义 --run-name 必须包含 b{batch_override}。")
         return custom_name
 
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", experiment):
         raise ValueError("--experiment 只能使用小写字母、数字、下划线和连字符。")
     tag = "" if experiment == "baseline" else f"_{experiment.replace('-', '_')}"
+    batch_tag = ""
+    if batch_override is not None and f"b{batch_override}" not in tag:
+        batch_tag = f"_b{batch_override}"
     timestamp = time.strftime("%Y%m%d_%H%M%S")
-    return f"yolo26m{tag}_seg_{timestamp}"
+    return f"yolo26m{tag}{batch_tag}_seg_{timestamp}"
 
 
 def print_summary(
@@ -292,6 +311,8 @@ def print_summary(
     profile: dict[str, Any],
     train_args: dict[str, Any],
     train_hash: str,
+    effective_train_hash: str,
+    runtime_overrides: dict[str, Any],
     branch: str,
     commit: str,
     package_file: Path,
@@ -306,9 +327,15 @@ def print_summary(
     print(f"Data             : {data_path}")
     print(f"Profile          : {profile['profile_id']}")
     print(f"Profile SHA256   : {train_hash}")
+    print(f"Effective SHA256 : {effective_train_hash}")
     print(f"Git branch       : {branch}")
     print(f"Git commit       : {commit}")
     print(f"Ultralytics path : {package_file}")
+    if "batch" in runtime_overrides:
+        print(
+            f"[NOTICE] 配对资源覆盖：batch={profile['train']['batch']} → {train_args['batch']}。"
+            "除 batch 外，其余锁定训练参数保持不变。"
+        )
     print("-------------------------------------------------")
     for key in (
         "imgsz",
@@ -338,6 +365,8 @@ def write_manifest(
     data_path: Path,
     profile: dict[str, Any],
     train_hash: str,
+    effective_train_hash: str,
+    runtime_overrides: dict[str, Any],
     branch: str,
     commit: str,
 ) -> None:
@@ -354,6 +383,15 @@ def write_manifest(
         "dataset_yaml_sha256": profile["dataset_yaml_sha256"],
         "baseline_profile": profile["profile_id"],
         "train_args_sha256": train_hash,
+        "effective_train_args_sha256": effective_train_hash,
+        "run_kind": "formal-resource-adjusted" if runtime_overrides else "formal",
+        "formal_comparison_eligible": not runtime_overrides,
+        "paired_comparison_group": "batch4" if runtime_overrides.get("batch") == 4 else None,
+        "profile_epochs": int(profile["train"]["epochs"]),
+        "effective_epochs": int(profile["train"]["epochs"]),
+        "profile_batch": int(profile["train"]["batch"]),
+        "effective_batch": int(runtime_overrides.get("batch", profile["train"]["batch"])),
+        "runtime_overrides": runtime_overrides,
     }
     path = save_dir / "experiment_manifest.json"
     path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -365,9 +403,16 @@ def main() -> None:
     model_path = resolve_path(args.model)
     pretrained_path = resolve_path(args.pretrained) if args.pretrained else None
     data_path = resolve_path(args.data)
-    run_name = make_run_name(args.experiment, args.run_name)
 
     profile, train_args, train_hash = load_baseline_profile()
+    effective_train_args = dict(train_args)
+    runtime_overrides: dict[str, Any] = {}
+    if args.batch is not None:
+        effective_train_args["batch"] = args.batch
+        runtime_overrides["batch"] = args.batch
+    effective_train_hash = canonical_hash(effective_train_args)
+    run_name = make_run_name(args.experiment, args.run_name, args.batch)
+
     branch, commit = verify_git_state(args.dry_run)
     yolo_class, version, package_file = verify_ultralytics_source()
 
@@ -393,8 +438,10 @@ def main() -> None:
         model_mode=model_mode,
         data_path=data_path,
         profile=profile,
-        train_args=train_args,
+        train_args=effective_train_args,
         train_hash=train_hash,
+        effective_train_hash=effective_train_hash,
+        runtime_overrides=runtime_overrides,
         branch=branch,
         commit=commit,
         package_file=package_file,
@@ -406,7 +453,7 @@ def main() -> None:
         return
 
     # 复制后再加入运行时路径参数，避免修改从 profile 读取的锁定字典。
-    runtime_args = dict(train_args)
+    runtime_args = dict(effective_train_args)
     runtime_args.update(data=str(data_path), name=run_name)
     results = model.train(**runtime_args)
     save_dir = Path(results.save_dir).resolve()
@@ -420,6 +467,8 @@ def main() -> None:
         data_path=data_path,
         profile=profile,
         train_hash=train_hash,
+        effective_train_hash=effective_train_hash,
+        runtime_overrides=runtime_overrides,
         branch=branch,
         commit=commit,
     )
@@ -427,6 +476,8 @@ def main() -> None:
     best_path = save_dir / "weights" / "best.pt"
     print("\n[INFO] Training complete.")
     print(f"[INFO] Artifacts: {save_dir}")
+    if runtime_overrides:
+        print("[NOTICE] 本次是 batch=4 配对 Baseline，仅与同为 batch=4 的改进实验作严格比较。")
     print("[INFO] 正式对比请使用 best.pt 单独执行 split=val：")
     print(f"  yolo segment val model=\"{best_path}\" data=\"{data_path}\" split=val")
 
