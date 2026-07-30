@@ -20,6 +20,7 @@ Baseline-b4  vs  V2-P2-b4
 | Git 分支 | `codex/baseline-b4` |
 | 起点 | `main` |
 | 起点 commit | `d32a73f1e0f84a1b0139b69adb910cecd37361b9` |
+| 训练入口准备 commit | `30beed04d53c169f805eac37c7138f834f5a55a4` |
 | 模型 | 官方 `ultralytics-main/yolo26m-seg.pt` |
 | 模型 YAML | 不使用自定义 YAML |
 | P2/CBAM/Dice 源码 | 全部不包含 |
@@ -83,7 +84,7 @@ yolo26m_baseline_b4_seg_YYYYMMDD_HHMMSS
 ## 开始训练前检查
 
 - [x] 当前分支为 `codex/baseline-b4`；
-- [ ] Git 工作树干净，正式 commit 已记录；
+- [x] Git 工作树干净，训练入口准备 commit 已记录；
 - [x] `ultralytics.__file__` 指向本项目 `ultralytics-main`；
 - [x] 模型模式显示 `baseline-pretrained-pt`；
 - [x] 模型路径为 `ultralytics-main/yolo26m-seg.pt`；
@@ -98,6 +99,7 @@ yolo26m_baseline_b4_seg_YYYYMMDD_HHMMSS
 Model mode       : baseline-pretrained-pt
 Profile SHA256   : FA16F5C3748A9B978E62EDC50E85A5F1FA014CCBA1A3382AA1378030F4F26926
 Effective SHA256 : 5A90247FF46C3D0A38BC4A16714CA1A7C75BD038042CD37DD70FB63B7DD5F917
+Git commit       : 30beed04d53c169f805eac37c7138f834f5a55a4
 imgsz / epochs   : 640 / 400
 batch            : 4
 ```
