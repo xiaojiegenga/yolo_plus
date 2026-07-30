@@ -4,7 +4,8 @@
 
 - Git 分支：`v3-dice`
 - 源码实现 commit：`48229707ad39596feb8bf96efd6e7fcd8c1c37e5`
-- 状态：源码与无 epoch 检查完成，等待用户手动执行 1 epoch 预检
+- 1 epoch 预检 commit：`0ee29b9d7e51bc8f016b0e3069cfd9b20f70ccf8`
+- 状态：1 epoch 预检通过，等待用户手动执行 10 epoch 趋势预检
 - 严格对比对象：`Baseline-b4`
 - 最终指标来源：统一 `split=val`
 
@@ -128,6 +129,87 @@ epochs           : 400
 ```
 
 没有启动训练。
+
+## 1 epoch 预检结果
+
+用户于 2026-07-31 手动完成：
+
+```text
+runs/segment/runs_seg/yolo26m_v3_dice_b4_preflight1_seg_20260731_012746
+```
+
+### 身份与配置复核
+
+```text
+run_kind                  = preflight-1-epoch
+formal_comparison_eligible= false
+paired_comparison_group   = batch4
+model                     = yolo26m-seg.pt
+Ultralytics               = 8.4.80 editable source
+Python / Torch            = 3.10.19 / 2.10.0+cu130
+GPU                       = RTX 4060 Ti 8 GB
+epochs / batch / imgsz    = 1 / 4 / 640
+profile SHA256            = FA16F5C3748A9B978E62EDC50E85A5F1FA014CCBA1A3382AA1378030F4F26926
+effective SHA256          = C4013DF9A005BDE98882BCEACF7B570DEB2261D7F9800B08E39FAD19195D33DF
+```
+
+模型融合后为 23,509,010 参数、121.2 GFLOPs，与 Baseline-b4 的模型结构一致。
+这说明 V3 没有意外加载 n 模型，也没有混入 P2 或 CBAM 结构。
+
+### 数值健康检查
+
+| 检查项 | 结果 |
+|---|---:|
+| 峰值日志显存 | 3.75 GB |
+| 单轮训练时间 | 45.2 s |
+| `train/seg_loss` | 3.56231 |
+| `val/seg_loss` | 2.19572 |
+| Mask mAP50 | 0.41760 |
+| Mask mAP50-95 | 0.17292 |
+| Box mAP50 | 0.39981 |
+| Box mAP50-95 | 0.20717 |
+| `results.csv` 数值字段 | 全部有限 |
+| NaN/Inf、CUDA OOM、EMA 警告 | 均未出现 |
+| `best.pt` / `last.pt` | 均正常生成，单个 54,456,881 bytes |
+
+最终独立验证还得到：
+
+| 类别 | Mask P | Mask R | Mask mAP50 | Mask mAP50-95 |
+|---|---:|---:|---:|---:|
+| all | 0.524 | 0.382 | 0.417 | 0.173 |
+| Rice leaffolder | 0.561 | 0.295 | 0.365 | 0.147 |
+| Rice stemborers | 0.487 | 0.469 | 0.470 | 0.198 |
+
+这些数值只证明验证链路与 Mask 输出正常，不能作为论文性能结论。
+
+### 与 Baseline-b4 第 1 epoch 的排错对齐
+
+| 指标 | Baseline-b4 epoch 1 | V3 epoch 1 | 差值 |
+|---|---:|---:|---:|
+| train Box Loss | 2.01507 | 2.00836 | -0.00671 |
+| train Seg Loss | 2.50830 | 3.56231 | +1.05401（+42.02%） |
+| train Cls Loss | 4.07233 | 4.08889 | +0.01656 |
+| train DFL Loss | 0.00892 | 0.00886 | -0.00006 |
+| train Semantic Loss | 4.35159 | 4.36299 | +0.01140 |
+| Mask mAP50 | 0.40218 | 0.41760 | +0.01542 |
+| Mask mAP50-95 | 0.16228 | 0.17292 | +0.01064 |
+
+V3 的 Seg Loss 定义增加了 Dice 项，因此 Seg Loss 数值不能直接与 BCE-only 的
+Baseline 判断“越低越好”。首轮 Seg Loss 增大约 42% 表明 Dice 确实参与训练；其余四项
+训练 Loss 只发生很小变化，符合“唯一修改 Mask Loss”的设计。单轮 mAP 差值受早期训练
+波动影响，不用于宣称 V3 已经优于 Baseline。
+
+### 预检结论
+
+1 epoch 的全部门禁通过：
+
+- Dice 确实进入主实例 `seg_loss`；
+- Box 与 Mask 均产生非零、数量级合理的验证指标；
+- 预测图中存在位置合理的非空实例 Mask；
+- 未发生数值崩溃、显存溢出或验证错误；
+- run 与 manifest 正确标记为非正式预检。
+
+因此可以进入用户手动 10 epoch 趋势预检，但仍不能进入正式指标表。
 
 ## 用户手动命令
 
