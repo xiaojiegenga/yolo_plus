@@ -6,7 +6,8 @@
 - 源码实现 commit：`48229707ad39596feb8bf96efd6e7fcd8c1c37e5`
 - 1 epoch 预检 commit：`0ee29b9d7e51bc8f016b0e3069cfd9b20f70ccf8`
 - 10 epoch 预检 commit：`525b304c64bf13d5a2e29f3ddc3be2095622fb6c`
-- 状态：1/10 epoch 预检均通过，可以由用户手动执行 400 epoch 正式训练
+- 正式训练 run commit：`482fdcf9eaa3a5e6a0c1aed48a031b4c077c8dcf`
+- 状态：400 epoch 正式训练、best.pt Val 和严格配对分析均已完成
 - 严格对比对象：`Baseline-b4`
 - 最终指标来源：统一 `split=val`
 
@@ -371,4 +372,112 @@ yolo26m_v3_dice_b4_preflight1_seg_YYYYMMDD_HHMMSS
 
 ## 正式结果
 
-等待完成预检和正式训练后填写。预检结果不得写入正式指标对比表。
+用户于 2026-07-31 手动完成正式训练：
+
+```text
+runs/segment/runs_seg/yolo26m_v3_dice_b4_seg_20260731_015225
+```
+
+### 正式身份与可追溯信息
+
+```text
+run_kind                  = formal-resource-adjusted
+formal_comparison_eligible= true
+paired_comparison_group   = batch4
+git branch / commit       = v3-dice / 482fdcf9eaa3a5e6a0c1aed48a031b4c077c8dcf
+model / pretrained        = yolo26m-seg.pt / yolo26m-seg.pt
+epochs / batch / imgsz    = 400 / 4 / 640
+dataset SHA256            = 75996638EB9BBAED8B80D0413FFD57B374C0024B2C9F9EF5689AD90B5ADF78AF
+profile SHA256            = FA16F5C3748A9B978E62EDC50E85A5F1FA014CCBA1A3382AA1378030F4F26926
+effective SHA256          = 5A90247FF46C3D0A38BC4A16714CA1A7C75BD038042CD37DD70FB63B7DD5F917
+```
+
+上述 dataset、profile、effective params、预训练权重、batch 和 paired group 与
+Baseline-b4 一致。严格单变量为主实例 Mask Loss 中增加 `0.5 × Soft Dice`。
+
+关键产物：
+
+| 产物 | SHA256 / 信息 |
+|---|---|
+| `best.pt` | `055DD8B83184A644889D5A9DD5D05C70894A586FE9D69328DA68C99760927B2A` |
+| `last.pt` | `816610C866DBF70BD5244DAE6CCA105301C8243D9B79AE7897CA10C93034D1EF` |
+| `results.csv` | `A6DC39DB75A7648E34D51D6853A6ACCBC2FA9D98C1A6AD58281EA22F3C2C57E1` |
+| `experiment_manifest.json` | `D89DE5A7DEDC9785E8CAAD0F147D028EB1E5514A3056AF299FACA28D17E15AC8` |
+| 模型规模 | 23,509,010 参数 / 121.2 GFLOPs |
+
+### best.pt 的 Val 结果
+
+| 类别 | Box P | Box R | Box mAP50 | Box mAP50-95 | Mask P | Mask R | Mask mAP50 | Mask mAP50-95 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| all | 0.740 | 0.613 | 0.672 | 0.425 | **0.744** | **0.619** | **0.673** | **0.325** |
+| Rice leaffolder | 0.619 | 0.512 | 0.592 | 0.355 | **0.631** | **0.523** | **0.601** | **0.278** |
+| Rice stemborers | 0.861 | 0.714 | 0.752 | 0.495 | **0.856** | **0.714** | **0.744** | **0.372** |
+
+推理速度日志为 7.2 ms/image。由于模型结构、参数量和 GFLOPs 完全不变，该单次速度
+相对 Baseline-b4 的 7.9 ms/image 只能视为运行波动，不能宣称 Dice 提高了推理速度。
+
+### 与 Baseline-b4 的严格差值
+
+Mask 指标：
+
+| 类别 | ΔP | ΔR | ΔmAP50 | ΔmAP50-95 |
+|---|---:|---:|---:|---:|
+| all | **+0.087** | +0.010 | **+0.017** | +0.003 |
+| Rice leaffolder | **+0.036** | 0.000 | **+0.027** | +0.010 |
+| Rice stemborers | **+0.137** | +0.020 | +0.007 | -0.005 |
+
+整体 Box 指标也从 `P/R/mAP50/mAP50-95 =
+0.648/0.611/0.656/0.418` 变为
+`0.740/0.613/0.672/0.425`，差值为
+`+0.092/+0.002/+0.016/+0.007`。
+
+根据最终 P、R 计算的调和 F1（不是额外导出的官方指标）：
+
+| 类别 | Baseline-b4 | V3-Dice-b4 | 差值 |
+|---|---:|---:|---:|
+| all | 0.632 | 0.676 | **+0.044** |
+| Rice leaffolder | 0.557 | 0.572 | +0.015 |
+| Rice stemborers | 0.706 | 0.779 | **+0.072** |
+
+### 收敛、选优和数值健康
+
+- `results.csv` 共 400 行，epoch 1～400 连续；
+- 标准 fitness（Box mAP50-95 + Mask mAP50-95）最优为 epoch 306；
+- epoch 306 的 fitness 为 `0.75199`，因此正式结果使用官方 `best.pt`；
+- 单项 Mask mAP50 最高出现在 epoch 290（0.68297），单项 Mask mAP50-95
+  最高出现在 epoch 153（0.33856），但不得绕开统一 fitness 挑选不同 epoch；
+- 约 epoch 300 后训练 Loss 仍缓慢下降，而 mAP 进入波动平台，表现为轻度后期过拟合；
+- 由于 epoch 306 后只剩 94 轮，小于 patience=100，训练按计划完成 400 轮而没有早停；
+- 904 个 checkpoint 状态张量全部有限，NaN/Inf 张量数为 0；
+- 所有 `train/*`、Box/Mask metrics 和 fitness 均有限；
+- 72 个 epoch 的部分 `val/*_loss` 存在 NaN，只涉及训练期验证 Loss 诊断字段。
+  Baseline-b4 同版本也存在该上游问题，且 fitness 不使用这些字段，因此不构成 V3
+  权重或最终指标崩溃；论文仍不得比较这些 Val Loss 曲线。
+
+训练总时间为 4.184 h。V3 平均 37.656 s/epoch，Baseline-b4 平均
+37.348 s/epoch，Dice 训练计算开销约 0.8%；Dice 不参与推理。
+
+### 与 V2-P2 的补充观察
+
+V2-P2-b4 的总体 Mask `P/R/mAP50/mAP50-95` 为
+`0.650/0.624/0.682/0.335`。V3 相对 V2 为：
+
+```text
++0.094 / -0.005 / -0.009 / -0.010
+```
+
+V2 的总体 mAP 略高，V3 的 Precision 和 F1 明显更高，且 V3 没有 P2 的额外推理成本。
+两者可能具有互补性，但不同模块的收益不能直接相加，必须由后续组合实验验证。
+
+### 正式结论
+
+1. V3 是一个有效的独立改进：总体 Mask mAP50 提高 1.7 个百分点，F1 约提高
+   4.4 个百分点，并且不增加参数量或推理 FLOPs；
+2. 最主要的变化是 Precision 提升，说明模型预测更保守、误检减少；
+3. 卷叶螟 Mask mAP50 提高 2.7 个百分点、mAP50-95 提高 1.0 个百分点，
+   但 Recall 保持 0.523，因此核心漏检问题仍未解决；
+4. 总体 Mask mAP50-95 仅提高 0.3 个百分点，不能表述为“边界精度显著提升”；
+5. Dice 监督区域重叠，并非专门的边界损失，当前结果符合这一机制；
+6. 当前只有单一 seed。尤其 `+0.003` 的 mAP50-95 增益可能处于随机波动范围，
+   后续论文定稿如条件允许应补充多 seed 重复实验；
+7. V3 可保留为后续组合候选，但组合实验仍须以 Baseline-b4 为共同对照并独立验证。
