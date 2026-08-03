@@ -3,7 +3,7 @@
 ## 当前状态
 
 ```text
-阶段：1 epoch 功能预检通过，允许用户手动运行10 epoch趋势预检
+阶段：1/10 epoch 预检均通过，允许用户手动运行400 epoch正式实验
 分支：v1b-srcbam-b4
 起点：codex/baseline-b4
 正式对照：Baseline-b4
@@ -135,6 +135,64 @@ fused model:  23,574,744 Params / 121.3 GFLOPs
 判断：模型、Mask 分支和梯度均健康；V1b 没有重现旧 V1 在第一轮出现的明显总体 AP 下降，
 并且 Recall/mAP50/mAP50-95 相对同阶段 Baseline 为正。由于只有1 epoch，尚不能判断最终性能，
 但已经满足进入10 epoch趋势预检的门槛。预检指标不得写入正式 Baseline/V1b 性能对比表。
+
+## 10 epoch 趋势预检（2026-08-04）
+
+```text
+run:       yolo26m_v1b_srcbam_b4_preflight10_seg_20260804_012957
+commit:    4bf3a7d6520a5eeaa86ce8523d4ab3e56da4ee33
+split:     val
+images:    95
+instances: 330
+status:    passed（非正式结果）
+```
+
+终端对 `best.pt` 的最终独立验证结果：
+
+| 类别 | Mask P | Mask R | Mask mAP50 | Mask mAP50-95 |
+|---|---:|---:|---:|---:|
+| all | 0.601 | 0.595 | 0.582 | 0.289 |
+| Rice leaffolder | 0.535 | 0.516 | 0.538 | 0.233 |
+| Rice stemborers | 0.667 | 0.673 | 0.626 | 0.346 |
+
+`results.csv` 第10行与同为10 epoch总日程的旧 V1 预检比较：
+
+| epoch 10 Overall Mask | 旧 V1-CBAM-b4 | V1b-SR-CBAM-b4 | V1b - 旧 V1 |
+|---|---:|---:|---:|
+| Precision | 0.61259 | 0.60484 | -0.00775 |
+| Recall | 0.53043 | 0.59474 | **+0.06431** |
+| mAP50 | 0.58869 | 0.58274 | -0.00595 |
+| mAP50-95 | 0.27240 | 0.28940 | **+0.01700** |
+
+终端分类别结果进一步显示，V1b 相对旧 V1 的卷叶螟 Mask Recall 从 `0.310` 提升到
+`0.516`（`+0.206`），mAP50从 `0.531` 提升到 `0.538`；说明残差软融合和选择性放置已经
+明显缓解旧 V1 的“Precision高、Recall低”问题。
+
+曲线与权重健康检查：
+
+```text
+train box loss: 2.05376 -> 1.58075
+train seg loss: 2.52859 -> 1.45458
+train cls loss: 3.60348 -> 1.81071
+val box loss:   1.71792 -> 1.47087
+val seg loss:   1.53127 -> 1.30233
+val cls loss:   2.60497 -> 1.82709
+Mask Recall:    0.41825 -> 0.59474
+Mask mAP50:     0.41142 -> 0.58274
+Mask mAP50-95:  0.18340 -> 0.28940
+best fitness:   epoch 10, 0.62969
+best/last:      各912个状态张量，NaN/Inf=0
+P3 mix:         0.100000 -> 0.094845
+P4 mix:         0.100000 -> 0.100172
+```
+
+第1行除运行时间外与独立1-epoch预检逐字段相同，确定性复现通过。需要注意：10-epoch预检会
+把总 epochs 改成10，因此其学习率日程与400-epoch Baseline正式实验的前10行不同；相对
+Baseline-b4正式run的早期差值只能看方向，不能作为严格性能证据。正式性能仍只比较各自
+400-epoch训练的 `best.pt` 独立 `val` 结果。
+
+判断：1/10 epoch健康门禁均通过，源码保持冻结，允许用户手动启动400 epoch正式实验。
+预检结果只证明训练链路健康并显示合理趋势，不预先保证正式指标一定超过 Baseline-b4。
 
 ## 用户手动命令
 
