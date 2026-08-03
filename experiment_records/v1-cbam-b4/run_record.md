@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-- 状态：`ready_for_user_preflight`
+- 状态：`ready_for_formal_training`
 - 日期：2026-08-03
 - 新分支：`v1-cbam-b4`
 - 独立起点：`codex/baseline-b4` / `55fb63d5347439044824348cd7e4db40fd80f4a6`
@@ -231,3 +231,94 @@ experiment_manifest B87B12DBF39D53D1BCA4E38981AE1536CB2A327891F479F6F723AC4C6649
 3. Mask 指标不为零且与 Box 指标同量级；
 4. 第1轮处于 `warmup_epochs=5` 内，绝对 mAP 不能用于判断 CBAM 最终收益；
 5. **允许用户手动进入 10 epoch 趋势预检，仍不得写入正式指标对比表。**
+
+## 2026-08-03：10 epoch 趋势预检通过
+
+### 运行身份
+
+```text
+runs/segment/runs_seg/yolo26m_v1_cbam_b4_preflight10_seg_20260803_165450
+```
+
+| 项目 | 记录 |
+|---|---|
+| Git branch / commit | `v1-cbam-b4` / `b11980b6bb2a7fafcfe3ac0ed3e2b9c06010abb5` |
+| Run kind | `preflight-10-epoch` |
+| epochs / batch / imgsz | 10 / 4 / 640 |
+| Effective SHA256 | `F5BAF9E12F49E378AC9B0D3FE004A774BFC795F3EAFBA31A3D3B5D753F02B5BF` |
+| 总运行时间（results.csv） | 404.905 s |
+| 标准 fitness 最佳轮次 | epoch 9 |
+| best fitness | 0.63329 |
+| best.pt / last.pt 状态张量 | 916 / 916 |
+| best.pt / last.pt 非有限张量 | 0 / 0 |
+
+### 可复现性
+
+独立 1 epoch run 与本次 10 epoch run 的第1行进行逐字段比较：
+
+```text
+除 time 外的字段差异数量 = 0
+```
+
+这证明相同 seed 下，新 CBAM 初始化、数据顺序、Loss 和指标完全复现。
+
+### 训练趋势
+
+| 指标 | Epoch 1 | Epoch 10 | 变化 |
+|---|---:|---:|---:|
+| train/box_loss | 2.34179 | 1.59425 | -31.92% |
+| train/seg_loss | 2.88985 | 1.44928 | -49.85% |
+| train/cls_loss | 4.08065 | 1.78878 | -56.16% |
+| train/dfl_loss | 0.01098 | 0.00636 | -42.08% |
+| train/sem_loss | 3.88847 | 1.52355 | -60.82% |
+| Box mAP50 | 0.25785 | 0.57414 | +0.31629 |
+| Box mAP50-95 | 0.12358 | 0.35070 | +0.22712 |
+| Mask mAP50 | 0.28410 | 0.58869 | +0.30459 |
+| Mask mAP50-95 | 0.11140 | 0.27240 | +0.16100 |
+
+第3～4轮指标有波动，但仍处于5轮 warmup 以及较高学习率阶段；第7轮后 Box/Mask 指标明显
+恢复并保持高位。全部10行的训练 Loss、验证 Loss、指标和学习率均为有限值。
+
+### best.pt 最终预检 Val
+
+| 类别 | Mask P | Mask R | Mask mAP50 | Mask mAP50-95 |
+|---|---:|---:|---:|---:|
+| all | 0.659 | 0.481 | 0.588 | 0.288 |
+| Rice leaffolder | 0.691 | 0.310 | 0.531 | 0.233 |
+| Rice stemborers | 0.628 | 0.653 | 0.645 | 0.342 |
+
+对应 Overall Box P/R/mAP50/mAP50-95 为 `0.638/0.485/0.584/0.344`。
+
+卷叶螟 Recall 在短期 best.pt 中偏低，但10轮预检的用途是检查训练健康与收敛趋势，不能据此
+判定 CBAM 的正式效果；是否优于 Baseline-b4 只能等待完整训练的标准 fitness `best.pt`。
+
+### 模型与速度
+
+```text
+24,363,162 fused parameters
+121.9 GFLOPs
+7.9 ms/image inference
+```
+
+速度来自单次短预检验证，只记录，不用于论文正式效率结论。
+
+### 完整性哈希
+
+```text
+best.pt             7340161A693FC45E68A1D0DCD2CB710BF104C6CBBE02B50579B396FFE84AD924
+last.pt             7258F2524929479D47FE2D18E6B7F4AE00980C660618FFA507F5D1FB0D58E9BD
+results.csv         59BCC8BE6C0483161D7A2925BFC9501C9A885BCC55C1761D7BA3FA1905DAAC6D
+args.yaml           8D2873C477E7DE7161983D115D5597DB883F66F4205F2C0FD8693BF565AB3723
+experiment_manifest F4B2AB505CE7BE54A28FDB728882C4C36224599CEA98D2BDD7BF3F59A066EEA4
+```
+
+### 正式训练门禁判断
+
+1. 1 epoch 与10 epoch 的首轮完全复现；
+2. 全部主要训练 Loss 明显下降；
+3. Box/Mask mAP 总体明显上升且彼此量级一致；
+4. 无 OOM、NaN/Inf、EMA、保存、验证或 Mask 分支异常；
+5. 模型源码与训练参数不再修改；
+6. **允许用户手动启动400 epoch正式 V1-CBAM-b4 实验。**
+
+正式 run 才能写入指标对比表，10 epoch 指标仍仅用于门禁。
