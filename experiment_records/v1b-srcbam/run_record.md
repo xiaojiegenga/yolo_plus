@@ -3,7 +3,7 @@
 ## 当前状态
 
 ```text
-阶段：源码完成，静态检查通过，尚未训练
+阶段：1 epoch 功能预检通过，允许用户手动运行10 epoch趋势预检
 分支：v1b-srcbam-b4
 起点：codex/baseline-b4
 正式对照：Baseline-b4
@@ -90,6 +90,51 @@ Parameter increase:          65,734 (+0.24%)
 | Rice leaffolder mAP50 | 0.574 | 高于 Baseline |
 
 如果只提高 Precision 而降低 Recall 和 Overall AP，则仍判定失败。
+
+## 1 epoch 功能预检（2026-08-04）
+
+```text
+run:       yolo26m_v1b_srcbam_b4_preflight1_seg_20260804_012308
+commit:    89db38b7192566f7f35bf68e4c6c482580b5d57b
+split:     val
+images:    95
+instances: 330
+status:    passed（非正式结果）
+```
+
+终端最终独立验证结果：
+
+| 类别 | Mask P | Mask R | Mask mAP50 | Mask mAP50-95 |
+|---|---:|---:|---:|---:|
+| all | 0.414 | 0.446 | 0.412 | 0.181 |
+| Rice leaffolder | 0.520 | 0.362 | 0.393 | 0.161 |
+| Rice stemborers | 0.309 | 0.531 | 0.430 | 0.202 |
+
+为了比较同一训练阶段，以下使用各 run 的 `results.csv` 第1行，而不是终端重新搜索工作点后的
+P/R。三组实验使用同一数据、seed、batch=4和训练参数；V1b 相对 Baseline 的差值仅用于判断
+早期趋势，不能作为正式性能结论。
+
+| epoch 1 Mask 指标 | Baseline-b4 | 旧 V1-CBAM-b4 | V1b-SR-CBAM-b4 | V1b - Baseline |
+|---|---:|---:|---:|---:|
+| Precision | 0.50321 | 0.28878 | 0.43603 | -0.06718 |
+| Recall | 0.40137 | 0.39778 | 0.41825 | +0.01688 |
+| mAP50 | 0.40218 | 0.28410 | 0.41142 | +0.00924 |
+| mAP50-95 | 0.16228 | 0.11140 | 0.18340 | +0.02112 |
+
+健康检查：
+
+```text
+train losses: box=2.05376, seg=2.52859, cls=3.60348（均有限）
+val losses:   box=1.71792, seg=1.53127, cls=2.60497（均有限）
+best/last:    各912个状态张量，NaN/Inf=0
+P3 mix:       0.100000 -> 0.098947
+P4 mix:       0.100000 -> 0.099996
+fused model:  23,574,744 Params / 121.3 GFLOPs
+```
+
+判断：模型、Mask 分支和梯度均健康；V1b 没有重现旧 V1 在第一轮出现的明显总体 AP 下降，
+并且 Recall/mAP50/mAP50-95 相对同阶段 Baseline 为正。由于只有1 epoch，尚不能判断最终性能，
+但已经满足进入10 epoch趋势预检的门槛。预检指标不得写入正式 Baseline/V1b 性能对比表。
 
 ## 用户手动命令
 
