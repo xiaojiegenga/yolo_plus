@@ -9,7 +9,7 @@ import torch.nn.functional as F
 
 from ultralytics.utils.torch_utils import fuse_conv_and_bn
 
-from .conv import Conv, DWConv, GhostConv, LightConv, RepConv, autopad
+from .conv import CBAM, Conv, DWConv, GhostConv, LightConv, RepConv, autopad
 from .transformer import TransformerBlock
 
 __all__ = (
@@ -37,6 +37,7 @@ __all__ = (
     "C2fPSA",
     "C3Ghost",
     "C3k2",
+    "C3k2CBAM",
     "C3x",
     "CBFuse",
     "CBLinear",
@@ -1104,6 +1105,38 @@ class C3k2(C2f):
             else Bottleneck(self.c, self.c, shortcut, g)
             for _ in range(n)
         )
+
+
+class C3k2CBAM(C3k2):
+    """C3k2 followed by channel-and-spatial attention without changing layer indices.
+
+    This wrapper keeps all inherited C3k2 parameter names unchanged. Consequently, a
+    YOLO26m-seg checkpoint can transfer the original C3k2, neck, and segmentation-head
+    tensors by their existing state-dict keys; only ``self.cbam`` is newly initialized.
+    """
+
+    def __init__(
+        self,
+        c1: int,
+        c2: int,
+        n: int = 1,
+        c3k: bool = False,
+        e: float = 0.5,
+        attn: bool = False,
+        g: int = 1,
+        shortcut: bool = True,
+    ):
+        """Initialize the original C3k2 path and append a channel-preserving CBAM."""
+        super().__init__(c1, c2, n, c3k, e, attn, g, shortcut)
+        self.cbam = CBAM(c2)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Run C3k2 feature extraction, then recalibrate channels and spatial locations."""
+        return self.cbam(super().forward(x))
+
+    def forward_split(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply CBAM after the split-based C3k2 forward variant."""
+        return self.cbam(super().forward_split(x))
 
 
 class C3k(C3):
