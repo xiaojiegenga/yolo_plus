@@ -1,0 +1,4 @@
+model,version,run_kind,split,class,images,instances,box_precision,box_recall,box_map50,box_map50_95,mask_precision,mask_recall,mask_map50,mask_map50_95,best_epoch,checkpoint_sha256,source_run
+YOLO26m-CBAM-seg,v1-cbam-b4,formal-resource-adjusted,val,all,95,330,0.721,0.559,0.656,0.419,0.713,0.551,0.647,0.321,269,8910ACE7926B073ECC660E4E60E335E84E8DBD3DCF4F3AD4148D6E4941407FF2,runs/segment/runs_seg/yolo26m_v1_cbam_b4_seg_20260803_170737
+YOLO26m-CBAM-seg,v1-cbam-b4,formal-resource-adjusted,val,Rice leaffolder,66,281,0.668,0.445,0.569,0.336,0.675,0.448,0.583,0.270,269,8910ACE7926B073ECC660E4E60E335E84E8DBD3DCF4F3AD4148D6E4941407FF2,runs/segment/runs_seg/yolo26m_v1_cbam_b4_seg_20260803_170737
+YOLO26m-CBAM-seg,v1-cbam-b4,formal-resource-adjusted,val,Rice stemborers,32,49,0.773,0.673,0.742,0.503,0.752,0.653,0.711,0.371,269,8910ACE7926B073ECC660E4E60E335E84E8DBD3DCF4F3AD4148D6E4941407FF2,runs/segment/runs_seg/yolo26m_v1_cbam_b4_seg_20260803_170737

@@ -2,14 +2,14 @@
 
 ## 当前状态
 
-- 状态：`ready_for_formal_training`
+- 状态：`completed`
 - 日期：2026-08-03
 - 新分支：`v1-cbam-b4`
 - 独立起点：`codex/baseline-b4` / `55fb63d5347439044824348cd7e4db40fd80f4a6`
 - 源码准备提交：`80033bceb4df9652232b8ba0e6b0c015186e8fcb`
 - 严格对照：`Baseline-b4`
 - 旧 `v1-cbam`：保留为历史实验，不在其上继续修改
-- 正式训练：尚未开始；必须由用户手动启动
+- 正式训练：用户已手动完成；本记录使用 `best.pt` 的最终 `split=val` 结果
 
 ## 为什么重新补跑
 
@@ -322,3 +322,163 @@ experiment_manifest F4B2AB505CE7BE54A28FDB728882C4C36224599CEA98D2BDD7BF3F59A066
 6. **允许用户手动启动400 epoch正式 V1-CBAM-b4 实验。**
 
 正式 run 才能写入指标对比表，10 epoch 指标仍仅用于门禁。
+
+## 2026-08-03：400 epoch 正式训练完成
+
+### 运行身份
+
+```text
+runs/segment/runs_seg/yolo26m_v1_cbam_b4_seg_20260803_170737
+```
+
+| 项目 | 记录 |
+|---|---|
+| Git branch / run commit | `v1-cbam-b4` / `0f1d88630855b68aaeeee92b46078e9b7a692297` |
+| Run kind | `formal-resource-adjusted` |
+| Paired comparison group | `batch4` |
+| 严格对照 | `Baseline-b4` |
+| Profile / Effective batch | `8 / 4` |
+| 计划 / 实际 epoch | `400 / 369`，EarlyStopping |
+| Best epoch | `269` |
+| Patience | `100` |
+| 总训练时间 | `14,581.1 s = 4.050 h` |
+| 平均 / 中位 epoch 时间 | `39.52 / 39.36 s` |
+| Dataset SHA256 | `75996638EB9BBAED8B80D0413FFD57B374C0024B2C9F9EF5689AD90B5ADF78AF` |
+| Profile SHA256 | `FA16F5C3748A9B978E62EDC50E85A5F1FA014CCBA1A3382AA1378030F4F26926` |
+| Effective SHA256 | `5A90247FF46C3D0A38BC4A16714CA1A7C75BD038042CD37DD70FB63B7DD5F917` |
+
+`effective_train_args_sha256`、数据集、预训练权重、batch、seed、imgsz、优化器、增强和
+训练轮数上限均与 Baseline-b4 对齐。唯一模型变量仍是 Backbone 四处
+`C3k2 -> CBAM`。
+
+manifest 中的 `formal_comparison_eligible=false` 表示本次 batch=4 不等于历史 batch=8
+profile；同时 `paired_comparison_eligible=true`、`paired_comparison_group=batch4`，所以它
+可以与补跑的 Baseline-b4 做严格配对比较，不能直接与历史 Baseline-b8 做单变量比较。
+
+### 选优与 EarlyStopping
+
+当前 YOLO26 分割模型的统一 fitness 为：
+
+```text
+fitness = Box mAP50-95 + Mask mAP50-95
+```
+
+epoch 269：
+
+```text
+Box  mAP50-95 = 0.42010
+Mask mAP50-95 = 0.32054
+fitness       = 0.74064
+```
+
+这是369轮中的最高 fitness。之后连续100轮没有刷新，因此在 epoch 369 正常 EarlyStopping。
+不需要继续训练或改用 `last.pt`。Baseline-b4 的最佳 fitness 为0.73988，两者只差
+`+0.00076`；这一极小差异来自 Box mAP50-95 的抵消，不能解释为实例分割性能提升。
+
+### 数值健康与数据质量
+
+- `results.csv` 包含 epoch 1～369，共369行，无缺失 epoch；
+- 全部训练 Loss、Box/Mask P/R/mAP、学习率与 fitness 均为有限值；
+- `best.pt` 和 `last.pt` 各含916个状态张量，非有限张量均为0；
+- 没有 OOM、EMA 污染、Mask 崩溃、空 Mask 或 checkpoint 保存失败；
+- 训练期共有164个 NaN，但只位于诊断性 Val Loss：
+  `val/box_loss=40`、`val/seg_loss=42`、`val/cls_loss=42`、`val/dfl_loss=40`；
+- Baseline-b4 在相同版本中也存在同类 Val Loss NaN，且 checkpoint fitness 不使用这些字段。
+
+因此 `best.pt` 与最终 Val 指标可用于正式比较，但论文不得用这些含 NaN 的训练期
+Val Loss 曲线证明模型优劣。
+
+### 完整性哈希与模型规模
+
+```text
+best.pt             8910ACE7926B073ECC660E4E60E335E84E8DBD3DCF4F3AD4148D6E4941407FF2
+last.pt             D6A8BAB3694180678AEB648BC35FC837C2645A4BF89279E45E9FBD589895737F
+results.csv         B23BD104467D101C6327E6C1081E48F09E84CBB9BED0EDB41A3F376EC74B58F1
+args.yaml           D621ECCECFD84499AC4813062F6DF41977A96CE774B33A88C4639092D26FFAB9
+experiment_manifest B712AF2437FD5951A0748725D3CE92FB12DCE75AEECABEFBA058D25BA4AF3696
+```
+
+最终 fused inference summary：
+
+```text
+24,363,162 parameters
+121.9 GFLOPs
+56,258,037 bytes for best.pt
+8.2 ms/image inference
+```
+
+### `best.pt` 最终 Val
+
+| 类别 | Images | Instances | Box P | Box R | Box mAP50 | Box mAP50-95 | Mask P | Mask R | Mask mAP50 | Mask mAP50-95 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| all | 95 | 330 | 0.721 | 0.559 | 0.656 | 0.419 | 0.713 | 0.551 | 0.647 | 0.321 |
+| Rice leaffolder | 66 | 281 | 0.668 | 0.445 | 0.569 | 0.336 | 0.675 | 0.448 | 0.583 | 0.270 |
+| Rice stemborers | 32 | 49 | 0.773 | 0.673 | 0.742 | 0.503 | 0.752 | 0.653 | 0.711 | 0.371 |
+
+轻量结构化结果另存于 `val_metrics.csv`。
+
+### 与 Baseline-b4 的严格差值
+
+Overall：
+
+| 指标 | Baseline-b4 | V1-CBAM-b4 | V1 - Baseline |
+|---|---:|---:|---:|
+| Box P | 0.648 | 0.721 | **+0.073** |
+| Box R | 0.611 | 0.559 | **-0.052** |
+| Box mAP50 | 0.656 | 0.656 | 0.000 |
+| Box mAP50-95 | 0.418 | 0.419 | +0.001 |
+| Mask P | 0.657 | 0.713 | **+0.056** |
+| Mask R | 0.609 | 0.551 | **-0.058** |
+| Mask mAP50 | 0.656 | 0.647 | **-0.009** |
+| Mask mAP50-95 | 0.322 | 0.321 | -0.001 |
+
+分类别 Mask：
+
+| 类别/指标 | Baseline-b4 | V1-CBAM-b4 | V1 - Baseline |
+|---|---:|---:|---:|
+| Leaffolder P | 0.595 | 0.675 | **+0.080** |
+| Leaffolder R | 0.523 | 0.448 | **-0.075** |
+| Leaffolder mAP50 | 0.574 | 0.583 | +0.009 |
+| Leaffolder mAP50-95 | 0.268 | 0.270 | +0.002 |
+| Stemborers P | 0.719 | 0.752 | +0.033 |
+| Stemborers R | 0.694 | 0.653 | **-0.041** |
+| Stemborers mAP50 | 0.737 | 0.711 | **-0.026** |
+| Stemborers mAP50-95 | 0.377 | 0.371 | -0.006 |
+
+根据最终 P/R 计算的调和 F1（派生指标，不是额外导出的官方指标）：
+
+| 类别 | Baseline-b4 | V1-CBAM-b4 | 差值 |
+|---|---:|---:|---:|
+| all | 0.632 | 0.622 | -0.010 |
+| Rice leaffolder | 0.557 | 0.539 | -0.018 |
+| Rice stemborers | 0.706 | 0.699 | -0.007 |
+
+### 计算代价
+
+| 项目 | Baseline-b4 | V1-CBAM-b4 | 变化 |
+|---|---:|---:|---:|
+| Fused Params | 23.509 M | 24.363 M | +3.63% |
+| FLOPs | 121.2 G | 121.9 G | +0.58% |
+| `best.pt` 文件大小 | 54.538 MB | 56.258 MB | +3.15% |
+| Inference | 7.9 ms/image | 8.2 ms/image | +3.8%（单次日志） |
+| 平均 epoch 时间 | 37.35 s | 39.52 s | +5.8% |
+
+推理时间来自各自一次最终验证，存在系统波动；Params 和 FLOPs 是更稳定的结构开销证据。
+
+### 正式结论与 V4 决策
+
+1. **代码和训练链路有效，但当前四处 CBAM 不是总体实例分割改进。** Overall Mask
+   mAP50/mAP50-95 分别为 `-0.009/-0.001`，F1 为 `-0.010`。
+2. **主要变化是 Precision/Recall 权衡。** Precision 提高0.056，但 Recall 降低0.058，
+   说明模型在统一 P/R 汇总工作点上变得更保守，减少误检的同时增加漏检。
+3. **没有命中项目首要目标。** 卷叶螟 Mask Recall 从0.523降至0.448（-0.075）；
+   虽然其 mAP50/mAP50-95 小幅增加0.009/0.002，但不足以抵消召回退化。
+4. **钻心虫整体也退化。** Mask mAP50/mAP50-95 为 `-0.026/-0.006`。
+5. **历史 V1-b8 的正向结果不能继续作为严格因果证据。** 当前 V1-b4 使用统一源码、
+   权重、训练入口和 Baseline-b4 后没有复现整体收益，说明历史结果混入了 batch、旧实现和
+   单次训练波动等因素。
+6. **当前 CBAM 不通过 V4 模块纳入门槛。** 后续不应机械组合 `CBAM+P2+Dice`；
+   若继续 V4，应优先验证严格对照中有正向总体收益的模块。若未来重新研究注意力，需把
+   “减少放置数量、只放深层、增加残差/缩放或换轻量注意力”定义为新的独立实验。
+7. 当前仍只有 `seed=42`。小于约0.01的 AP 差异应保守解释；但卷叶螟 Recall 的
+   `-0.075` 已明显背离本项目目标，足以支持“不默认纳入 V4”的工程决策。
