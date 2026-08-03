@@ -43,6 +43,7 @@ from .block import (
     C2fPSA,
     C3Ghost,
     C3k2,
+    C3k2SRCBAM,
     C3x,
     CBFuse,
     CBLinear,
@@ -74,6 +75,7 @@ from .conv import (
     Index,
     LightConv,
     RepConv,
+    ResidualCBAM,
     SpatialAttention,
 )
 from .head import (
@@ -138,6 +140,7 @@ __all__ = (
     "C2fPSA",
     "C3Ghost",
     "C3k2",
+    "C3k2SRCBAM",
     "C3x",
     "CBFuse",
     "CBLinear",
@@ -172,6 +175,7 @@ __all__ = (
     "RTDETRDecoder",
     "RepC3",
     "RepConv",
+    "ResidualCBAM",
     "RepNCSPELAN4",
     "RepVGGDW",
     "ResNetLayer",

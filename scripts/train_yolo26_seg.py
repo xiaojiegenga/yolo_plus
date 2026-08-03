@@ -4,8 +4,8 @@
 1. Baseline 和所有单项改进共用同一份训练参数；
 2. 改进实验默认只允许改变模型源码/模型 YAML 和实验名称；
 3. 在正式训练前检查源码路径、数据、权重、Git 状态和配置指纹；
-4. 不在本脚本中混入 CBAM、P2、Dice 等版本专用实现。
-5. 为配对显存实验，只允许显式使用 batch=4 覆盖，并完整记录唯一参数差异。
+4. 模型结构仍由源码/YAML 定义；脚本只锁定实验身份并验证预训练权重迁移；
+5. 为 batch=4 配对实验，只允许显式使用 batch=4 覆盖，并完整记录唯一参数差异。
 
 正式训练示例：
     python scripts/train_yolo26_seg.py --experiment baseline
@@ -13,8 +13,14 @@
 Baseline-b4 配对实验：
     python scripts/train_yolo26_seg.py --experiment baseline-b4 --batch 4
 
+V1b-SR-CBAM-b4 配对实验：
+    python scripts/train_yolo26_seg.py --experiment v1b-srcbam-b4 --batch 4
+
 只检查、不训练：
-    python scripts/train_yolo26_seg.py --experiment baseline-b4 --batch 4 --dry-run
+    python scripts/train_yolo26_seg.py --experiment v1b-srcbam-b4 --batch 4 --dry-run
+
+用户手动预检（非正式，只允许 1 或 10 epoch）：
+    python scripts/train_yolo26_seg.py --experiment v1b-srcbam-b4 --batch 4 --preflight-epochs 1
 
 未来自定义模型 YAML 示例：
     python scripts/train_yolo26_seg.py ^
@@ -44,6 +50,7 @@ SOURCE_ROOT = REPO_ROOT / "ultralytics-main"
 PROFILE_PATH = REPO_ROOT / "experiments" / "yolo26m_seg_baseline_train.yaml"
 DEFAULT_WEIGHTS = SOURCE_ROOT / "yolo26m-seg.pt"
 DEFAULT_DATA = REPO_ROOT.parent / "code" / "yolo_data.yaml"
+V1B_SRCBAM_MODEL = SOURCE_ROOT / "ultralytics" / "cfg" / "models" / "26" / "yolo26m-srcbam-seg.yaml"
 
 # 该值由 profile 中 train 字典按 JSON key 排序后计算。
 # 它用于阻止训练参数被无意修改；若以后确实要研究超参数，应创建独立实验，
@@ -56,19 +63,19 @@ EXPECTED_DATASET_YAML_SHA256 = "75996638EB9BBAED8B80D0413FFD57B374C0024B2C9F9EF5
 
 
 def parse_args() -> argparse.Namespace:
-    """解析模型身份、路径和受控的 batch=4 资源覆盖。"""
+    """解析模型身份、路径和受控的预检/资源覆盖参数。"""
     parser = argparse.ArgumentParser(
         description="使用锁定的 Baseline 参数训练 YOLO26m-seg 或其单项改进模型。"
     )
     parser.add_argument(
         "--experiment",
         default="baseline",
-        help="实验标识，例如 baseline、v2-p2、v3-dice；只用于记录和运行目录命名。",
+        help="实验标识，例如 baseline、baseline-b4、v1b-srcbam-b4；也用于启用锁定的实验预设。",
     )
     parser.add_argument(
         "--model",
-        default=str(DEFAULT_WEIGHTS),
-        help="Baseline .pt 或改进模型 YAML。相对路径按项目根目录解析。",
+        default=None,
+        help="Baseline .pt 或改进模型 YAML。已定义实验预设时可省略，且不允许指向其他模型。",
     )
     parser.add_argument(
         "--pretrained",
@@ -91,12 +98,22 @@ def parse_args() -> argparse.Namespace:
         help="完成全部检查并构建模型，但不启动训练。",
     )
     parser.add_argument(
+        "--preflight-epochs",
+        type=int,
+        choices=(1, 10),
+        default=None,
+        help=(
+            "仅供用户手动启动的非正式预检训练，可选 1 或 10；除 epochs 外仍使用锁定 Baseline 参数。"
+            "不填写时为 400 epoch 正式实验。"
+        ),
+    )
+    parser.add_argument(
         "--batch",
         type=int,
         choices=(4,),
         default=None,
         help=(
-            "显式将锁定 profile 的 batch=8 覆盖为 4；只用于与 V2-P2-b4 配对。"
+            "显式将锁定 profile 的 batch=8 覆盖为 4；只用于同为 batch=4 的配对实验。"
             "该差异会写入运行名、控制台摘要和 experiment_manifest.json。"
         ),
     )
@@ -124,6 +141,24 @@ def resolve_path(value: str | Path) -> Path:
     if not path.is_absolute():
         path = REPO_ROOT / path
     return path.resolve()
+
+
+def resolve_experiment_paths(args: argparse.Namespace) -> tuple[Path, Path | None]:
+    """解析模型路径，并锁定 V1b-SR-CBAM-b4 的实验身份。"""
+    if args.experiment == "v1b-srcbam-b4":
+        expected_model = V1B_SRCBAM_MODEL.resolve()
+        expected_pretrained = DEFAULT_WEIGHTS.resolve()
+        if args.batch != 4:
+            raise ValueError("v1b-srcbam-b4 是 Baseline-b4 配对实验，必须显式传入 --batch 4。")
+        if args.model is not None and resolve_path(args.model) != expected_model:
+            raise ValueError(f"v1b-srcbam-b4 模型已锁定为：{expected_model}")
+        if args.pretrained is not None and resolve_path(args.pretrained) != expected_pretrained:
+            raise ValueError(f"v1b-srcbam-b4 预训练权重已锁定为：{expected_pretrained}")
+        return expected_model, expected_pretrained
+
+    model_path = resolve_path(args.model) if args.model else DEFAULT_WEIGHTS.resolve()
+    pretrained_path = resolve_path(args.pretrained) if args.pretrained else None
+    return model_path, pretrained_path
 
 
 def load_baseline_profile() -> tuple[dict[str, Any], dict[str, Any], str]:
@@ -249,13 +284,72 @@ def verify_weight(path: Path, expected_hash: str) -> str:
     return actual_hash
 
 
+def verify_v1b_srcbam_transfer(model: Any) -> dict[str, Any]:
+    """验证 V1b 只新增两个 SR-CBAM，并完整继承 Baseline 状态张量。"""
+    from ultralytics.nn.modules import C3k2SRCBAM
+
+    attention_blocks = [module for module in model.model.modules() if isinstance(module, C3k2SRCBAM)]
+    if len(attention_blocks) != 2:
+        raise RuntimeError(f"V1b-SR-CBAM 应包含 2 个 C3k2SRCBAM，实际为 {len(attention_blocks)}。")
+
+    checkpoint = getattr(model, "ckpt", None) or {}
+    source_model = checkpoint.get("ema") or checkpoint.get("model")
+    if source_model is None:
+        raise RuntimeError("无法从 checkpoint 读取 Baseline 模型，不能验证 SR-CBAM 权重迁移。")
+
+    source_state = source_model.float().state_dict()
+    target_state = model.model.state_dict()
+    matched_keys = [
+        key for key, value in source_state.items() if key in target_state and target_state[key].shape == value.shape
+    ]
+    missing_source = sorted(set(source_state).difference(matched_keys))
+    new_target = sorted(set(target_state).difference(matched_keys))
+    unexpected_new = [key for key in new_target if ".srcbam." not in key]
+    verified_equal = sum(
+        target_state[key].equal(source_state[key].to(device=target_state[key].device, dtype=target_state[key].dtype))
+        for key in matched_keys
+    )
+    initial_mix = [float(block.srcbam.mix_logit.sigmoid().detach().cpu()) for block in attention_blocks]
+
+    if missing_source:
+        raise RuntimeError(
+            "V1b-SR-CBAM 没有完整继承 Baseline 权重，已拒绝继续。\n"
+            f"未匹配张量数量：{len(missing_source)}\n前 10 项：{missing_source[:10]}"
+        )
+    if unexpected_new:
+        raise RuntimeError(
+            "V1b-SR-CBAM 出现了注意力模块以外的新参数，已拒绝继续。\n"
+            f"前 10 项：{unexpected_new[:10]}"
+        )
+    if verified_equal != len(matched_keys):
+        raise RuntimeError(f"Baseline 权重数值验证失败：{verified_equal}/{len(matched_keys)} 个张量完全相等。")
+    if any(abs(value - 0.1) > 1e-6 for value in initial_mix):
+        raise RuntimeError(f"SR-CBAM 初始残差混合系数应为 0.1，实际为：{initial_mix}")
+
+    return {
+        "mode": "baseline-yolo26m-seg-to-selective-residual-cbam",
+        "placement": "backbone P3/P4 only; P2/P5 unchanged",
+        "channel_attention": "shared MLP over global average and max pooling",
+        "residual_formula": "y = x + mix * (CBAM(x) - x)",
+        "initial_mix": initial_mix,
+        "attention_modules": len(attention_blocks),
+        "source_tensors": len(source_state),
+        "target_tensors": len(target_state),
+        "transferred_tensors": len(matched_keys),
+        "verified_equal_tensors": verified_equal,
+        "new_attention_tensors": len(new_target),
+        "new_attention_initialization": "seeded default; residual mix locked to 0.1 at initialization",
+    }
+
+
 def build_model(
     yolo_class: Any,
     model_path: Path,
     pretrained_path: Path | None,
     baseline_weight_hash: str,
-) -> tuple[Any, str]:
-    """构建 Baseline 或自定义 YAML 模型，不包含任何改进专用代码。"""
+    experiment: str,
+) -> tuple[Any, str, dict[str, Any] | None]:
+    """构建 Baseline/自定义模型，并按实验需要返回可复现的迁移报告。"""
     if not model_path.is_file():
         raise FileNotFoundError(f"模型文件不存在：{model_path}")
 
@@ -278,16 +372,27 @@ def build_model(
 
     if getattr(model, "task", None) != "segment":
         raise RuntimeError(f"模型任务必须是 segment，实际为：{getattr(model, 'task', None)}")
-    return model, mode
+    transfer_report = verify_v1b_srcbam_transfer(model) if experiment == "v1b-srcbam-b4" else None
+    return model, mode, transfer_report
 
 
-def make_run_name(experiment: str, custom_name: str | None, batch_override: int | None = None) -> str:
+def make_run_name(
+    experiment: str,
+    custom_name: str | None,
+    preflight_epochs: int | None = None,
+    batch_override: int | None = None,
+) -> str:
     """生成可读、可追溯且不会覆盖旧实验的目录名。"""
     if custom_name:
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", custom_name):
             raise ValueError("--run-name 只能包含字母、数字、点、下划线和连字符。")
         if batch_override is not None and f"b{batch_override}" not in custom_name.lower():
             raise ValueError(f"使用 --batch {batch_override} 时，自定义 --run-name 必须包含 b{batch_override}。")
+        if preflight_epochs is not None and f"preflight{preflight_epochs}" not in custom_name.lower():
+            raise ValueError(
+                f"使用 --preflight-epochs {preflight_epochs} 时，自定义 --run-name "
+                f"必须包含 preflight{preflight_epochs}。"
+            )
         return custom_name
 
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", experiment):
@@ -296,8 +401,9 @@ def make_run_name(experiment: str, custom_name: str | None, batch_override: int 
     batch_tag = ""
     if batch_override is not None and f"b{batch_override}" not in tag:
         batch_tag = f"_b{batch_override}"
+    gate_tag = "" if preflight_epochs is None else f"_preflight{preflight_epochs}"
     timestamp = time.strftime("%Y%m%d_%H%M%S")
-    return f"yolo26m{tag}{batch_tag}_seg_{timestamp}"
+    return f"yolo26m{tag}{batch_tag}{gate_tag}_seg_{timestamp}"
 
 
 def print_summary(
@@ -313,6 +419,8 @@ def print_summary(
     train_hash: str,
     effective_train_hash: str,
     runtime_overrides: dict[str, Any],
+    transfer_report: dict[str, Any] | None,
+    run_kind: str,
     branch: str,
     commit: str,
     package_file: Path,
@@ -320,6 +428,7 @@ def print_summary(
     """在真正训练前完整显示公平对比信息。"""
     print("\n========== YOLO26 Fair Training Config ==========")
     print(f"Experiment       : {experiment}")
+    print(f"Run kind         : {run_kind}")
     print(f"Run name         : {run_name}")
     print(f"Model            : {model_path}")
     print(f"Model mode       : {model_mode}")
@@ -331,6 +440,11 @@ def print_summary(
     print(f"Git branch       : {branch}")
     print(f"Git commit       : {commit}")
     print(f"Ultralytics path : {package_file}")
+    if run_kind.startswith("preflight-"):
+        print(
+            f"[NOTICE] 非正式预检：锁定 profile 的 epochs={profile['train']['epochs']}，"
+            f"本次仅运行 epochs={train_args['epochs']}，结果不得写入正式对比表。"
+        )
     if "batch" in runtime_overrides:
         print(
             f"[NOTICE] 配对资源覆盖：batch={profile['train']['batch']} → {train_args['batch']}。"
@@ -352,6 +466,14 @@ def print_summary(
         "copy_paste",
     ):
         print(f"{key:17}: {train_args[key]}")
+    if transfer_report:
+        print("-------------------------------------------------")
+        print("Pretrained transfer verification:")
+        print(json.dumps(transfer_report, ensure_ascii=False, indent=2))
+    if runtime_overrides:
+        print("-------------------------------------------------")
+        print("Runtime overrides:")
+        print(json.dumps(runtime_overrides, ensure_ascii=False, indent=2))
     print("=================================================\n")
 
 
@@ -367,6 +489,8 @@ def write_manifest(
     train_hash: str,
     effective_train_hash: str,
     runtime_overrides: dict[str, Any],
+    transfer_report: dict[str, Any] | None,
+    run_kind: str,
     branch: str,
     commit: str,
 ) -> None:
@@ -384,14 +508,16 @@ def write_manifest(
         "baseline_profile": profile["profile_id"],
         "train_args_sha256": train_hash,
         "effective_train_args_sha256": effective_train_hash,
-        "run_kind": "formal-resource-adjusted" if runtime_overrides else "formal",
-        "formal_comparison_eligible": not runtime_overrides,
+        "run_kind": run_kind,
+        "formal_comparison_eligible": run_kind == "formal",
+        "paired_comparison_eligible": run_kind == "formal-resource-adjusted",
         "paired_comparison_group": "batch4" if runtime_overrides.get("batch") == 4 else None,
         "profile_epochs": int(profile["train"]["epochs"]),
-        "effective_epochs": int(profile["train"]["epochs"]),
+        "effective_epochs": int(runtime_overrides.get("epochs", profile["train"]["epochs"])),
         "profile_batch": int(profile["train"]["batch"]),
         "effective_batch": int(runtime_overrides.get("batch", profile["train"]["batch"])),
         "runtime_overrides": runtime_overrides,
+        "pretrained_transfer": transfer_report,
     }
     path = save_dir / "experiment_manifest.json"
     path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -400,18 +526,24 @@ def write_manifest(
 
 def main() -> None:
     args = parse_args()
-    model_path = resolve_path(args.model)
-    pretrained_path = resolve_path(args.pretrained) if args.pretrained else None
+    model_path, pretrained_path = resolve_experiment_paths(args)
     data_path = resolve_path(args.data)
 
     profile, train_args, train_hash = load_baseline_profile()
     effective_train_args = dict(train_args)
     runtime_overrides: dict[str, Any] = {}
+    run_kind = "formal"
+    if args.preflight_epochs is not None:
+        effective_train_args["epochs"] = args.preflight_epochs
+        runtime_overrides["epochs"] = args.preflight_epochs
+        run_kind = f"preflight-{args.preflight_epochs}-epoch"
     if args.batch is not None:
         effective_train_args["batch"] = args.batch
         runtime_overrides["batch"] = args.batch
+        if args.preflight_epochs is None:
+            run_kind = "formal-resource-adjusted"
     effective_train_hash = canonical_hash(effective_train_args)
-    run_name = make_run_name(args.experiment, args.run_name, args.batch)
+    run_name = make_run_name(args.experiment, args.run_name, args.preflight_epochs, args.batch)
 
     branch, commit = verify_git_state(args.dry_run)
     yolo_class, version, package_file = verify_ultralytics_source()
@@ -423,11 +555,16 @@ def main() -> None:
         )
 
     verify_data_yaml(data_path, str(profile["dataset_yaml_sha256"]))
-    model, model_mode = build_model(
+    # 自定义 YAML 会新增随机初始化张量。构建前固定种子，使 dry-run、预检和正式训练可复现。
+    from ultralytics.utils.torch_utils import init_seeds
+
+    init_seeds(int(train_args["seed"]), deterministic=bool(train_args["deterministic"]))
+    model, model_mode, transfer_report = build_model(
         yolo_class,
         model_path,
         pretrained_path,
         str(profile["baseline_weight_sha256"]),
+        args.experiment,
     )
 
     print_summary(
@@ -442,6 +579,8 @@ def main() -> None:
         train_hash=train_hash,
         effective_train_hash=effective_train_hash,
         runtime_overrides=runtime_overrides,
+        transfer_report=transfer_report,
+        run_kind=run_kind,
         branch=branch,
         commit=commit,
         package_file=package_file,
@@ -455,8 +594,10 @@ def main() -> None:
     # 复制后再加入运行时路径参数，避免修改从 profile 读取的锁定字典。
     runtime_args = dict(effective_train_args)
     runtime_args.update(data=str(data_path), name=run_name)
-    results = model.train(**runtime_args)
-    save_dir = Path(results.save_dir).resolve()
+    model.train(**runtime_args)
+    if model.trainer is None or not getattr(model.trainer, "save_dir", None):
+        raise RuntimeError("训练结束后没有取得 trainer.save_dir，无法写入实验清单。")
+    save_dir = Path(model.trainer.save_dir).resolve()
 
     write_manifest(
         save_dir,
@@ -469,6 +610,8 @@ def main() -> None:
         train_hash=train_hash,
         effective_train_hash=effective_train_hash,
         runtime_overrides=runtime_overrides,
+        transfer_report=transfer_report,
+        run_kind=run_kind,
         branch=branch,
         commit=commit,
     )
@@ -476,8 +619,10 @@ def main() -> None:
     best_path = save_dir / "weights" / "best.pt"
     print("\n[INFO] Training complete.")
     print(f"[INFO] Artifacts: {save_dir}")
-    if runtime_overrides:
-        print("[NOTICE] 本次是 batch=4 配对 Baseline，仅与同为 batch=4 的改进实验作严格比较。")
+    if run_kind.startswith("preflight-"):
+        print("[NOTICE] 本次是非正式预检，只用于排错，不能写入正式指标对比表。")
+    elif run_kind == "formal-resource-adjusted":
+        print("[NOTICE] 本次是 batch=4 配对实验，仅与同软件版本、同为 batch=4 的实验作严格比较。")
     print("[INFO] 正式对比请使用 best.pt 单独执行 split=val：")
     print(f"  yolo segment val model=\"{best_path}\" data=\"{data_path}\" split=val")
 

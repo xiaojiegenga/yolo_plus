@@ -9,7 +9,7 @@ import torch.nn.functional as F
 
 from ultralytics.utils.torch_utils import fuse_conv_and_bn
 
-from .conv import Conv, DWConv, GhostConv, LightConv, RepConv, autopad
+from .conv import Conv, DWConv, GhostConv, LightConv, RepConv, ResidualCBAM, autopad
 from .transformer import TransformerBlock
 
 __all__ = (
@@ -37,6 +37,7 @@ __all__ = (
     "C2fPSA",
     "C3Ghost",
     "C3k2",
+    "C3k2SRCBAM",
     "C3x",
     "CBFuse",
     "CBLinear",
@@ -1104,6 +1105,37 @@ class C3k2(C2f):
             else Bottleneck(self.c, self.c, shortcut, g)
             for _ in range(n)
         )
+
+
+class C3k2SRCBAM(C3k2):
+    """C3k2 followed by selective residual CBAM for sparse small-object features.
+
+    Inheriting C3k2 preserves every baseline parameter key. Only ``srcbam`` is new,
+    which allows exact transfer from the YOLO26m-seg checkpoint.
+    """
+
+    def __init__(
+        self,
+        c1: int,
+        c2: int,
+        n: int = 1,
+        c3k: bool = False,
+        e: float = 0.5,
+        attn: bool = False,
+        g: int = 1,
+        shortcut: bool = True,
+    ):
+        """Initialize the original C3k2 path and a softly mixed residual CBAM."""
+        super().__init__(c1, c2, n, c3k, e, attn, g, shortcut)
+        self.srcbam = ResidualCBAM(c2, reduction=16, kernel_size=7, init_mix=0.1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Extract C3k2 features, then apply residual attention refinement."""
+        return self.srcbam(super().forward(x))
+
+    def forward_split(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply the same residual attention after the split-based C3k2 path."""
+        return self.srcbam(super().forward_split(x))
 
 
 class C3k(C3):
