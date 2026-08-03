@@ -155,3 +155,79 @@ yolo26m_v1_cbam_b4_seg_YYYYMMDD_HHMMSS
 - [ ] best.pt、results.csv、args.yaml、manifest 的 SHA256；
 - [ ] 与 Baseline-b4 的逐项差值和是否进入 V4 的判断。
 
+## 2026-08-03：1 epoch 功能预检通过
+
+### 运行身份
+
+```text
+runs/segment/runs_seg/yolo26m_v1_cbam_b4_preflight1_seg_20260803_164907
+```
+
+| 项目 | 记录 |
+|---|---|
+| Git branch / commit | `v1-cbam-b4` / `0c9f7a3d70bb634bfdbc96e1927e363c92e484ea` |
+| Run kind | `preflight-1-epoch` |
+| epochs / batch / imgsz | 1 / 4 / 640 |
+| Effective SHA256 | `C4013DF9A005BDE98882BCEACF7B570DEB2261D7F9800B08E39FAD19195D33DF` |
+| 实际 epoch 时间 | 44.8154 s |
+| best.pt / last.pt 状态张量 | 916 / 916 |
+| best.pt / last.pt 非有限张量 | 0 / 0 |
+| best.pt 大小 | 56,175,925 bytes |
+
+权重迁移报告仍为：Baseline `904/904` 个张量逐值相等，新增 12 个状态张量全部属于4个CBAM。
+
+### 第 1 epoch Loss
+
+| 指标 | 数值 |
+|---|---:|
+| train/box_loss | 2.34179 |
+| train/seg_loss | 2.88985 |
+| train/cls_loss | 4.08065 |
+| train/dfl_loss | 0.01098 |
+| train/sem_loss | 3.88847 |
+| val/box_loss | 1.83801 |
+| val/seg_loss | 1.64626 |
+| val/cls_loss | 2.58790 |
+| val/dfl_loss | 0.01090 |
+
+所有训练 Loss、验证 Loss、P/R、mAP 和学习率均为有限值。
+
+### best.pt 最终预检 Val
+
+| 类别 | Mask P | Mask R | Mask mAP50 | Mask mAP50-95 |
+|---|---:|---:|---:|---:|
+| all | 0.289 | 0.398 | 0.284 | 0.111 |
+| Rice leaffolder | 0.389 | 0.530 | 0.417 | 0.156 |
+| Rice stemborers | 0.191 | 0.265 | 0.153 | 0.067 |
+
+对应 Overall Box mAP50/mAP50-95 为 `0.258/0.124`。Mask 与 Box 指标处于同一量级，
+没有出现 mask coefficient/proto 数据流崩溃。
+
+最终 fused summary：
+
+```text
+24,363,162 parameters
+121.9 GFLOPs
+8.6 ms/image inference
+```
+
+该 Params/GFLOPs 与历史 V1-CBAM 最终模型一致，进一步支持新同层包装与旧独立插层在模型
+计算结构上等价。单次 1 epoch 的速度包含启动与短运行波动，不作为论文速度结论。
+
+### 完整性哈希
+
+```text
+best.pt             C7168D6B3EEA9DCA0FF92FA4EFBAA72C1367914FFA663C96110331CE467F77EB
+last.pt             D3836108F072FBDBCE0A4E09A99898C1BA5E9E5AE90A220EA64DEC409CDCFD65
+results.csv         1CAF430AC05114EE4DAC6D0BAF580BD402FB0A59EDBD4C87F8C34F587079BA1C
+args.yaml           2CB04EBF59B026A0B35906F7B9E35D5602E5122FEEFC9CE0E5992EF163EC5C9A
+experiment_manifest B87B12DBF39D53D1BCA4E38981AE1536CB2A327891F479F6F723AC4C66498130
+```
+
+### 门禁判断
+
+1. 模型、数据、batch、seed、profile 和预训练权重身份正确；
+2. 无 OOM、NaN/Inf、EMA、保存或验证异常；
+3. Mask 指标不为零且与 Box 指标同量级；
+4. 第1轮处于 `warmup_epochs=5` 内，绝对 mAP 不能用于判断 CBAM 最终收益；
+5. **允许用户手动进入 10 epoch 趋势预检，仍不得写入正式指标对比表。**
