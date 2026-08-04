@@ -1,0 +1,6 @@
+experiment,completed_epochs,best_epoch,training_hours,mean_epoch_seconds,params_m,flops_g,best_pt_mib,inference_ms
+Baseline-b4,370,270,3.8385,37.35,23.509010,121.2,52.01,7.9
+V1-CBAM-b4,369,269,4.0503,39.52,24.363162,121.9,53.65,8.2
+V1b-SR-CBAM-b4,400,304,4.4205,39.78,23.574744,121.3,52.14,7.8
+V2-P2-b4,339,239,4.5529,48.35,23.904312,141.4,53.44,9.3
+V3-Dice-b4,400,306,4.1841,37.66,23.509010,121.2,52.02,7.2
