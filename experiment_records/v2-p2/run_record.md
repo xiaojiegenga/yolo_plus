@@ -1,33 +1,42 @@
-# V2 P2 实验记录
+# V2 P2-b4 实验记录
 
-## 当前状态
+## 正式状态
 
-- Git 分支：`v2-p2`
-- 状态：新分支已建立，尚未修改模型源码
-- 对比对象：Baseline
-- 正式指标来源：独立 `split=val`
+```text
+run:       yolo26m_v2_p2_b4_seg_20260730_022727
+branch:    v2-p2
+commit:    3e00818505c191abbc6136eb38d9ed5dfa0da966
+split:     val
+images:    95
+instances: 330
+schedule:  400 epochs, batch=4; early stop at epoch 339; best epoch 239
+status:    completed
+```
 
-## 唯一实验变量
+唯一主要结构变量是在 Neck/Head 中增加轻量 P2 小目标预测尺度。未叠加 CBAM 或 Dice Loss。
+dataset、预训练权重、训练 profile、effective 参数和 batch 与 Baseline-b4 严格配对。
 
-在 Neck 和 Segment Head 中增加 P2 小目标预测尺度，验证其对卷叶螟小目标召回率的影响。
+## `best.pt` 独立 Val
 
-## 明确不包含
+| 类别 | Mask P | Mask R | Mask mAP50 | Mask mAP50-95 |
+|---|---:|---:|---:|---:|
+| all | 0.650 | 0.624 | 0.682 | 0.335 |
+| Rice leaffolder | 0.650 | 0.512 | 0.589 | 0.264 |
+| Rice stemborers | 0.650 | 0.735 | 0.775 | 0.406 |
 
-- CBAM；
-- Dice Loss；
-- P2 Mask Proto；
-- Proto26 全局改动；
-- SegmentationValidator 改动；
-- 额外训练参数优化。
+## 相对 Baseline-b4
 
-## 开始实现前
+```text
+Overall Mask Recall:      0.609 -> 0.624  (+0.015)
+Overall Mask mAP50:       0.656 -> 0.682  (+0.026)
+Overall Mask mAP50-95:    0.322 -> 0.335  (+0.013)
+Leaffolder Recall:        0.523 -> 0.512  (-0.011)
+Leaffolder Mask mAP50:    0.574 -> 0.589  (+0.015)
+Leaffolder Mask mAP50-95: 0.268 -> 0.264  (-0.004)
+```
 
-- [ ] 确认 `git diff main...v2-p2` 没有模型源码差异；
-- [x] 编写公共训练脚本；
-- [x] 锁定并逐项核对 Baseline 的 103 个训练参数；
-- [x] Baseline 模型 `dry-run` 通过（未启动训练）；
-- [ ] 确认 P2 Head 的尺度顺序；
-- [ ] 设计可解释的预训练权重迁移；
-- [ ] 先完成 1 epoch 和 5～10 epoch 短跑；
-- [ ] 确认 Box 和 Mask 均正常学习；
-- [ ] 再开始完整训练。
+计算代价：23.904M fused Params、141.4G FLOPs、9.3ms/image；相对 Baseline 的 FLOPs 与推理
+时间约增加17%。
+
+结论：P2 对总体 AP 有小幅正收益，但没有命中“提高卷叶螟 Recall”的原始目标，收益主要来自
+钻心虫，同时带来明显计算开销。可作为完整组合候选，但不宜作为解决卷叶螟漏检的核心模块。

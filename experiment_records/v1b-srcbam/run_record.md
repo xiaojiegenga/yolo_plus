@@ -223,3 +223,111 @@ Baseline-b4正式run的早期差值只能看方向，不能作为严格性能证
 ```
 
 正式训练只能在1/10 epoch健康门禁通过后执行。
+
+## 400 epoch 正式实验（2026-08-04）
+
+```text
+run:        yolo26m_v1b_srcbam_b4_seg_20260804_032115
+commit:     b017dd4618e7ce7a92ba3b3292abe13ed05cc69d
+split:      val
+images:     95
+instances:  330
+schedule:   400 epochs, batch=4
+status:     completed
+```
+
+本次与 `Baseline-b4` 的 dataset SHA、预训练权重 SHA、训练 profile SHA、effective
+训练参数 SHA、seed、软件版本和 batch 完全一致，可以作为严格配对实验。模型结构是主要变量。
+
+### 最终 `best.pt` 独立 Val
+
+| 类别 | Mask P | Mask R | Mask F1 | Mask mAP50 | Mask mAP50-95 |
+|---|---:|---:|---:|---:|---:|
+| all | 0.680 | 0.621 | 0.649 | 0.663 | 0.322 |
+| Rice leaffolder | 0.616 | 0.488 | 0.545 | 0.561 | 0.248 |
+| Rice stemborers | 0.743 | 0.755 | 0.749 | 0.766 | 0.396 |
+
+模型复杂度与速度：
+
+```text
+Fused parameters: 23,574,744
+FLOPs:             121.3 G
+Inference:         7.8 ms/image
+```
+
+### 与 Baseline-b4 的严格差值
+
+| 类别/指标 | Baseline-b4 | V1b-SR-CBAM-b4 | V1b - Baseline |
+|---|---:|---:|---:|
+| Overall Mask P | 0.657 | 0.680 | +0.023 |
+| Overall Mask R | 0.609 | 0.621 | +0.012 |
+| Overall Mask F1 | 0.632 | 0.649 | +0.017 |
+| Overall Mask mAP50 | 0.656 | 0.663 | +0.007 |
+| Overall Mask mAP50-95 | 0.322 | 0.322 | +0.000 |
+| Leaffolder Mask P | 0.595 | 0.616 | +0.021 |
+| Leaffolder Mask R | 0.523 | 0.488 | **-0.035** |
+| Leaffolder Mask F1 | 0.557 | 0.545 | -0.012 |
+| Leaffolder Mask mAP50 | 0.574 | 0.561 | **-0.013** |
+| Leaffolder Mask mAP50-95 | 0.268 | 0.248 | **-0.020** |
+| Stemborers Mask P | 0.719 | 0.743 | +0.024 |
+| Stemborers Mask R | 0.694 | 0.755 | **+0.061** |
+| Stemborers Mask F1 | 0.706 | 0.749 | **+0.043** |
+| Stemborers Mask mAP50 | 0.737 | 0.766 | **+0.029** |
+| Stemborers Mask mAP50-95 | 0.377 | 0.396 | **+0.019** |
+
+### 训练健康与最佳轮次
+
+- `results.csv` 共400行，epoch 1～400无缺失；所有训练损失、指标和学习率均为有限值；
+- fitness（Box mAP50-95 + Mask mAP50-95）最高点在 epoch 304，为 `0.73651`；
+- 单项最高 Mask mAP50 为 epoch 303 的 `0.67572`，最高 Mask mAP50-95 为 epoch 218 的
+  `0.32412`，这是同一 run 中不同评价维度的正常波动；
+- epoch 400 的 Mask mAP50/mAP50-95 已回落到 `0.61235/0.28490`，因此必须使用
+  `best.pt`，不能使用 `last.pt`；
+- `best.pt` 与 `last.pt` 的912个状态张量均无 NaN/Inf；
+- P3/P4 的注意力混合强度从 `0.1/0.1` 学习到约 `0.184/0.114`，表明注意力分支被实际使用，
+  但保持在温和范围，没有关闭或饱和。
+
+### 混淆矩阵旁证
+
+检测混淆矩阵（不是 Mask 指标）显示，Baseline-b4 到 V1b：
+
+```text
+Rice leaffolder true-positive ratio: 0.62 -> 0.59
+Rice stemborers true-positive ratio: 0.73 -> 0.80
+```
+
+其方向与 Mask 分类结果一致：V1b 的主要收益来自钻心虫，卷叶螟漏检并未改善。
+
+### 预设门槛判定
+
+| 预设门槛 | 结果 |
+|---|---|
+| Overall Mask mAP50 高于0.656，最好至少 +0.005 | **通过**：0.663，+0.007 |
+| Overall Mask mAP50-95 不低于0.322 | **刚好通过**：0.322 |
+| Leaffolder Recall 最好不低于0.523 | **失败**：0.488，-0.035 |
+| Leaffolder mAP50 高于0.574 | **失败**：0.561，-0.013 |
+
+### 最终结论
+
+V1b 是一个**整体指标小幅正收益、计算开销几乎不变，但类别收益明显偏向钻心虫的部分成功实验**。
+它解决了旧 V1 的 Overall Recall/AP 下降问题，却没有解决项目最重要的卷叶螟漏检问题。
+
+因此：
+
+1. 可以在论文中保留，表述为“选择性残差注意力改善整体平衡与钻心虫识别”，不能表述为
+   “显著改善卷叶螟小目标召回”；
+2. V1b 可以作为组合候选，但不应假设与其他模块必然产生可加收益；
+3. 若正式组合训练预算只允许一次，优先测试 `V1b + Dice`：V1b 提供轻量 Backbone 改进，
+   V3-Dice 在现有独立实验中对卷叶螟 mAP50/mAP50-95 最好；
+4. P2 可作为额外完整组合实验，但其约16.7% FLOPs 增量与卷叶螟 Recall 未提升，论文中需要
+   同时报告精度收益与效率代价。
+
+关键文件 SHA256：
+
+```text
+results.csv: 72C7560A72A565C67B1A13C27F2BF66C75C1C3002A6D1CD8B567A0A6511379A9
+manifest:    74EC459E3E93C2BDCD3CF0715D131737AEFBCF96B0D62B7DBE08D9C2039F4123
+args.yaml:   8C215F0E18211522E90E423F33F0A94189D24760A10AF84CC80DF88A4DB5E4C6
+best.pt:     72B2DC86036FCA14B00F77904E5BC6297FCBD344BC337D37CDCEE0659EF0244B
+last.pt:     6F822E631DA23746DFB89171C889C754C322BFA664A5D3728F2613D2F35B55D7
+```
