@@ -28,6 +28,7 @@ YOLO26m-seg Baseline。本结果将成为后续 data-v1 源码改进实验的唯
 | Git 分支 | `codex/data-v1-baseline-b4` |
 | 分支起点 | `codex/baseline-b4` |
 | 起点 commit | `55fb63d5347439044824348cd7e4db40fd80f4a6` |
+| 正式训练准备 commit | `88532a5d5c2a7698730e939d9c8ad66069e2db52` |
 | 模型 | 官方 `ultralytics-main/yolo26m-seg.pt` |
 | 模型模式 | `baseline-pretrained-pt` |
 | 自定义模型 YAML | 不使用 |
@@ -106,6 +107,7 @@ Dataset ID       : rice-pest-data-v1
 Dataset SHA256   : BBC51AAA6E53471AA72C6AABE4D3D09DA7770C0445A9597320C4A318D79EE922
 Dataset images   : {'train': 742, 'val': 93, 'test': 93}
 Parent leakage   : 0
+Git commit       : 88532a5d5c2a7698730e939d9c8ad66069e2db52
 imgsz / epochs   : 640 / 400
 batch            : 4
 ```
@@ -126,4 +128,3 @@ runs/segment/runs_seg/yolo26m_data_v1_baseline_b4_seg_YYYYMMDD_HHMMSS
 
 正式训练结束后，统一使用 `best.pt` 的独立 `split=val` 结果填写论文对比表；在最终模型和方案
 冻结前，不使用独立 `test` 反复调参。
-
