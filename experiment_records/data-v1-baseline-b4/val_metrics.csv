@@ -1,0 +1,4 @@
+dataset_version,experiment,split,class,images,instances,box_p,box_r,box_map50,box_map50_95,mask_p,mask_r,mask_f1_derived,mask_map50,mask_map50_95
+data-v1,data-v1-baseline-b4,val,all,93,409,0.722,0.594,0.661,0.399,0.717,0.586,0.645,0.657,0.310
+data-v1,data-v1-baseline-b4,val,Rice leaffolder,72,353,0.660,0.598,0.657,0.386,0.671,0.600,0.634,0.670,0.302
+data-v1,data-v1-baseline-b4,val,Rice stemborers,27,56,0.785,0.589,0.665,0.413,0.763,0.571,0.653,0.644,0.319
