@@ -49,7 +49,10 @@ def _label_dir(image_dir: Path) -> Path:
     return Path(*parts)
 
 
-def audit_yolo_seg_dataset(data_yaml: str | Path) -> dict[str, Any]:
+def audit_yolo_seg_dataset(
+    data_yaml: str | Path,
+    dataset_id: str = "unversioned",
+) -> dict[str, Any]:
     """Validate a YOLO polygon dataset and return a reproducible summary."""
     data_yaml = Path(data_yaml).resolve()
     with data_yaml.open("r", encoding="utf-8") as handle:
@@ -189,7 +192,7 @@ def audit_yolo_seg_dataset(data_yaml: str | Path) -> dict[str, Any]:
     issue_types = Counter(issue["type"] for issue in issues)
     return {
         "schema_version": 1,
-        "dataset_id": "rice-pest-data-v1",
+        "dataset_id": dataset_id,
         "dataset_root": str(root),
         "dataset_yaml": str(data_yaml),
         "dataset_yaml_sha256": sha256_file(data_yaml),
@@ -211,9 +214,14 @@ def audit_yolo_seg_dataset(data_yaml: str | Path) -> dict[str, Any]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="校验并生成 YOLO 分割数据集内容指纹。")
     parser.add_argument("--data", required=True, help="YOLO 数据集 YAML 路径。")
+    parser.add_argument(
+        "--dataset-id",
+        default="unversioned",
+        help="写入审计报告的数据集版本标识，例如 rice-pest-data-v2。",
+    )
     parser.add_argument("--output", default=None, help="可选 JSON 输出路径。")
     args = parser.parse_args()
-    report = audit_yolo_seg_dataset(args.data)
+    report = audit_yolo_seg_dataset(args.data, dataset_id=args.dataset_id)
     payload = json.dumps(report, ensure_ascii=False, indent=2)
     if args.output:
         output = Path(args.output).resolve()

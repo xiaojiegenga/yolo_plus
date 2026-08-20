@@ -5,14 +5,14 @@
 2. 改进实验默认只允许改变模型源码/模型 YAML 和实验名称；
 3. 在正式训练前检查源码路径、数据、权重、Git 状态和配置指纹；
 4. 不在本脚本中混入 CBAM、P2、Dice 等版本专用实现。
-5. data-v1 Baseline 将 batch=4 直接锁进独立 profile，不再作为临时覆盖参数；
+5. data-v2 Baseline 将 batch=8 直接锁进独立 profile，不再作为临时覆盖参数；
 6. 正式启动前校验全部图片与标签的内容指纹，防止同一路径下的数据被悄悄替换。
 
-data-v1 Baseline-b4 正式训练：
-    python scripts/train_yolo26_seg.py --experiment data-v1-baseline-b4
+data-v2 Baseline-b8 正式训练：
+    python scripts/train_yolo26_seg.py --experiment data-v2-baseline-b8
 
 只检查、不训练：
-    python scripts/train_yolo26_seg.py --experiment data-v1-baseline-b4 --dry-run
+    python scripts/train_yolo26_seg.py --experiment data-v2-baseline-b8 --dry-run
 
 未来自定义模型 YAML 示例：
     python scripts/train_yolo26_seg.py ^
@@ -41,30 +41,30 @@ from dataset_integrity import audit_yolo_seg_dataset
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SOURCE_ROOT = REPO_ROOT / "ultralytics-main"
-PROFILE_PATH = REPO_ROOT / "experiments" / "yolo26m_seg_data_v1_baseline_b4.yaml"
+PROFILE_PATH = REPO_ROOT / "experiments" / "yolo26m_seg_data_v2_baseline_b8.yaml"
 DEFAULT_WEIGHTS = SOURCE_ROOT / "yolo26m-seg.pt"
 DEFAULT_DATA = REPO_ROOT.parent / "code" / "yolo_data.yaml"
 
 # 该值由 profile 中 train 字典按 JSON key 排序后计算。
 # 它用于阻止训练参数被无意修改；若以后确实要研究超参数，应创建独立实验，
 # 不要直接改动 Baseline 公平对比配置。
-EXPECTED_TRAIN_ARGS_SHA256 = "5A90247FF46C3D0A38BC4A16714CA1A7C75BD038042CD37DD70FB63B7DD5F917"
-EXPECTED_PROFILE_ID = "yolo26m-seg-data-v1-baseline-b4-20260807"
+EXPECTED_TRAIN_ARGS_SHA256 = "FA16F5C3748A9B978E62EDC50E85A5F1FA014CCBA1A3382AA1378030F4F26926"
+EXPECTED_PROFILE_ID = "yolo26m-seg-data-v2-baseline-b8-20260820"
 EXPECTED_ULTRALYTICS_VERSION = "8.4.80"
 EXPECTED_BASELINE_WEIGHT_SHA256 = "16B636F04E8FB6A325B3370F22DC5E5535FF473E384F4D041FD28D788F6EE9F5"
-EXPECTED_DATASET_YAML_SHA256 = "75996638EB9BBAED8B80D0413FFD57B374C0024B2C9F9EF5689AD90B5ADF78AF"
-EXPECTED_DATASET_ID = "rice-pest-data-v1"
-EXPECTED_DATASET_CONTENT_SHA256 = "BBC51AAA6E53471AA72C6AABE4D3D09DA7770C0445A9597320C4A318D79EE922"
+EXPECTED_DATASET_YAML_SHA256 = "5CA21A32CF66AA2EC4776069E2507839E4005AE3E1D47C2117CB96473007AD33"
+EXPECTED_DATASET_ID = "rice-pest-data-v2"
+EXPECTED_DATASET_CONTENT_SHA256 = "02B9A2475D45CE5C88D933E0B7338235AD1622DFEB3266C2E7356EE874538C49"
 
 
 def parse_args() -> argparse.Namespace:
-    """解析模型身份和路径；正式训练参数全部由 data-v1 profile 锁定。"""
+    """解析模型身份和路径；正式训练参数全部由 data-v2 profile 锁定。"""
     parser = argparse.ArgumentParser(
         description="使用锁定的 Baseline 参数训练 YOLO26m-seg 或其单项改进模型。"
     )
     parser.add_argument(
         "--experiment",
-        default="baseline",
+        default="data-v2-baseline-b8",
         help="实验标识，例如 baseline、v2-p2、v3-dice；只用于记录和运行目录命名。",
     )
     parser.add_argument(
@@ -230,29 +230,29 @@ def verify_data_yaml(path: Path, expected_hash: str) -> dict[str, Any]:
 
 
 def verify_dataset_content(path: Path, profile: dict[str, Any]) -> dict[str, Any]:
-    """校验 data-v1 文件内容、原图分组隔离和标签结构。"""
-    print("[INFO] 正在校验 data-v1 内容指纹（约 0.9 GiB，只读取，不修改）...")
-    report = audit_yolo_seg_dataset(path)
+    """校验 data-v2 文件内容、原图分组隔离和标签结构。"""
+    print("[INFO] 正在校验 data-v2 内容指纹（只读取，不修改）...")
+    report = audit_yolo_seg_dataset(path, dataset_id=str(profile["dataset_id"]))
     expected_hash = str(profile["dataset_content_sha256"])
     if report["dataset_content_sha256"] != expected_hash:
         raise RuntimeError(
-            "data-v1 内容指纹与锁定 profile 不一致，已拒绝启动。\n"
+            "data-v2 内容指纹与锁定 profile 不一致，已拒绝启动。\n"
             f"期望：{expected_hash}\n"
             f"实际：{report['dataset_content_sha256']}"
         )
     if report["issue_count"]:
         raise RuntimeError(
-            f"data-v1 存在 {report['issue_count']} 项结构问题，已拒绝启动："
+            f"data-v2 存在 {report['issue_count']} 项结构问题，已拒绝启动："
             f"{report['issue_types']}"
         )
     if report["parent_groups_crossing_splits"]:
         raise RuntimeError(
-            "data-v1 仍存在原图跨 train/val/test，已拒绝启动："
+            "data-v2 仍存在原图跨 train/val/test，已拒绝启动："
             f"{report['parent_groups_crossing_splits']} 个原图组"
         )
     if report["exact_image_hashes_crossing_splits"]:
         raise RuntimeError(
-            "data-v1 存在完全相同图片跨 split，已拒绝启动："
+            "data-v2 存在完全相同图片跨 split，已拒绝启动："
             f"{report['exact_image_hashes_crossing_splits']} 组"
         )
     return report
@@ -495,7 +495,7 @@ def main() -> None:
     best_path = save_dir / "weights" / "best.pt"
     print("\n[INFO] Training complete.")
     print(f"[INFO] Artifacts: {save_dir}")
-    print("[NOTICE] 本次是 data-v1 / batch=4 正式 Baseline，只能与相同数据指纹和 profile 的改进实验严格比较。")
+    print("[NOTICE] 本次是 data-v2 / batch=8 正式 Baseline，只能与相同数据指纹和 profile 的改进实验严格比较。")
     print("[INFO] 正式对比请使用 best.pt 单独执行 split=val：")
     print(f"  yolo segment val model=\"{best_path}\" data=\"{data_path}\" split=val")
 
