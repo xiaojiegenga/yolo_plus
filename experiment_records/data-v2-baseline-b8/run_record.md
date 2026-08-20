@@ -55,17 +55,38 @@
 
 ## 4. 用户手动执行命令
 
-先执行不训练的检查：
+只保留10 epoch预检和400 epoch正式训练，不再执行1 epoch实验。
+
+Windows 本地10 epoch预检：
 
 ```powershell
-& "D:\tool\Anaconda3\envs\yolo26\python.exe" .\scripts\train_yolo26_seg.py --experiment data-v2-baseline-b8 --dry-run
+& "D:\tool\Anaconda3\envs\yolo26\python.exe" .\scripts\train_yolo26_seg.py --experiment data-v2-baseline-b8 --preflight10
 ```
 
-检查通过后，由用户手动开始正式训练：
+Windows 本地正式训练：
 
 ```powershell
 & "D:\tool\Anaconda3\envs\yolo26\python.exe" .\scripts\train_yolo26_seg.py --experiment data-v2-baseline-b8
 ```
+
+Linux 云服务器将数据解压到 `/root/yolo_data` 后，10 epoch预检和正式训练分别为：
+
+```bash
+python scripts/cloud_train_data_v2.py --preflight10
+python scripts/cloud_train_data_v2.py
+```
+
+默认使用轻量检查。只有需要重新核验完整数据内容时，才额外添加 `--strict-checks`。
+
+云端简化规则：
+
+- 脚本直接优先导入 Git clone 中的 `ultralytics-main`，不要求重复执行 editable install；
+- 云端入口会检查环境；除CUDA版PyTorch外的依赖缺失时，自动完成一次 editable install；
+- Git 仓库不保存 `.pt`，首次缺少权重时自动下载指定的 `yolo26m-seg.pt`；
+- Linux 默认数据 YAML 为 `experiments/yolo_data_v2_cloud.yaml`，数据根目录固定为 `/root/yolo_data`；
+- 默认仅检查2个类别、train/val/test目录及图片/标签数量；
+- 不提供1 epoch入口，也不要求正式训练前执行 dry-run；
+- 10 epoch结果仅用于确认流程，正式论文指标只取400 epoch正式训练。
 
 助手不得代替用户执行正式训练命令。
 

@@ -1,0 +1,11 @@
+# data-v2 云服务器默认路径
+# 将 datasets.zip 解压后保证 /root/yolo_data 下直接包含 images/ 和 labels/。
+
+path: /root/yolo_data
+train: images/train
+val: images/val
+test: images/test
+nc: 2
+names:
+  0: Rice leaffolder
+  1: Rice stemborers

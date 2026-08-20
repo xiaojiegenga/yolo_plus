@@ -3,23 +3,26 @@
 设计目标：
 1. Baseline 和所有单项改进共用同一份训练参数；
 2. 改进实验默认只允许改变模型源码/模型 YAML 和实验名称；
-3. 在正式训练前检查源码路径、数据、权重、Git 状态和配置指纹；
+3. 默认只执行轻量必要检查，云端拉取代码和下载数据后即可启动；
 4. 不在本脚本中混入 CBAM、P2、Dice 等版本专用实现。
 5. data-v2 Baseline 将 batch=8 直接锁进独立 profile，不再作为临时覆盖参数；
-6. 正式启动前校验全部图片与标签的内容指纹，防止同一路径下的数据被悄悄替换。
+6. 默认只校验类别、目录和文件数量；全量内容指纹作为可选严格模式。
 
-data-v2 Baseline-b8 正式训练：
+data-v2 Baseline-b8 正式训练（400 epoch）：
     python scripts/train_yolo26_seg.py --experiment data-v2-baseline-b8
 
-只检查、不训练：
-    python scripts/train_yolo26_seg.py --experiment data-v2-baseline-b8 --dry-run
+10 epoch 预检：
+    python scripts/train_yolo26_seg.py --experiment data-v2-baseline-b8 --preflight10
+
+不提供 1 epoch 训练模式。需要完整内容哈希时可额外传入 --strict-checks，
+默认云端流程不执行耗时的全量文件哈希。
 
 未来自定义模型 YAML 示例：
     python scripts/train_yolo26_seg.py ^
         --experiment v2-p2 ^
         --model ultralytics-main/ultralytics/cfg/models/26/yolo26m-p2-seg.yaml ^
         --pretrained ultralytics-main/yolo26m-seg.pt ^
-        --dry-run
+        --preflight10
 """
 
 from __future__ import annotations
@@ -36,14 +39,17 @@ from typing import Any
 
 import yaml
 
-from dataset_integrity import audit_yolo_seg_dataset
+from dataset_integrity import IMAGE_SUFFIXES, audit_yolo_seg_dataset
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SOURCE_ROOT = REPO_ROOT / "ultralytics-main"
 PROFILE_PATH = REPO_ROOT / "experiments" / "yolo26m_seg_data_v2_baseline_b8.yaml"
-DEFAULT_WEIGHTS = SOURCE_ROOT / "yolo26m-seg.pt"
-DEFAULT_DATA = REPO_ROOT.parent / "code" / "yolo_data.yaml"
+LOCAL_WEIGHTS = SOURCE_ROOT / "yolo26m-seg.pt"
+DEFAULT_WEIGHTS = LOCAL_WEIGHTS if LOCAL_WEIGHTS.is_file() else REPO_ROOT / "yolo26m-seg.pt"
+LOCAL_DATA = REPO_ROOT.parent / "code" / "yolo_data.yaml"
+CLOUD_DATA = REPO_ROOT / "experiments" / "yolo_data_v2_cloud.yaml"
+DEFAULT_DATA = LOCAL_DATA if LOCAL_DATA.is_file() else CLOUD_DATA
 
 # 该值由 profile 中 train 字典按 JSON key 排序后计算。
 # 它用于阻止训练参数被无意修改；若以后确实要研究超参数，应创建独立实验，
@@ -52,7 +58,6 @@ EXPECTED_TRAIN_ARGS_SHA256 = "FA16F5C3748A9B978E62EDC50E85A5F1FA014CCBA1A3382AA1
 EXPECTED_PROFILE_ID = "yolo26m-seg-data-v2-baseline-b8-20260820"
 EXPECTED_ULTRALYTICS_VERSION = "8.4.80"
 EXPECTED_BASELINE_WEIGHT_SHA256 = "16B636F04E8FB6A325B3370F22DC5E5535FF473E384F4D041FD28D788F6EE9F5"
-EXPECTED_DATASET_YAML_SHA256 = "5CA21A32CF66AA2EC4776069E2507839E4005AE3E1D47C2117CB96473007AD33"
 EXPECTED_DATASET_ID = "rice-pest-data-v2"
 EXPECTED_DATASET_CONTENT_SHA256 = "02B9A2475D45CE5C88D933E0B7338235AD1622DFEB3266C2E7356EE874538C49"
 
@@ -80,7 +85,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--data",
         default=str(DEFAULT_DATA),
-        help="数据集 YAML；内容必须与 Baseline 数据配置哈希一致。",
+        help="数据集 YAML；Windows 默认本地配置，Linux 默认 /root/yolo_data 配置。",
     )
     parser.add_argument(
         "--run-name",
@@ -88,9 +93,14 @@ def parse_args() -> argparse.Namespace:
         help="可选的输出目录名；不填写时根据实验标识和时间自动生成。",
     )
     parser.add_argument(
-        "--dry-run",
+        "--preflight10",
         action="store_true",
-        help="完成全部检查并构建模型，但不启动训练。",
+        help="只运行10 epoch短跑；不填写时执行profile锁定的400 epoch正式训练。",
+    )
+    parser.add_argument(
+        "--strict-checks",
+        action="store_true",
+        help="可选：训练前计算全部数据和权重SHA-256；默认关闭以简化云端流程。",
     )
     return parser.parse_args()
 
@@ -133,7 +143,6 @@ def load_baseline_profile() -> tuple[dict[str, Any], dict[str, Any], str]:
         "profile_id": EXPECTED_PROFILE_ID,
         "ultralytics_version": EXPECTED_ULTRALYTICS_VERSION,
         "baseline_weight_sha256": EXPECTED_BASELINE_WEIGHT_SHA256,
-        "dataset_yaml_sha256": EXPECTED_DATASET_YAML_SHA256,
         "dataset_id": EXPECTED_DATASET_ID,
         "dataset_content_sha256": EXPECTED_DATASET_CONTENT_SHA256,
     }
@@ -171,27 +180,21 @@ def git_output(*args: str) -> str:
     return result.stdout.strip() if result.returncode == 0 else "unknown"
 
 
-def verify_git_state(dry_run: bool) -> tuple[str, str]:
-    """正式训练必须对应一个干净、可回溯的源码提交。"""
+def read_git_state() -> tuple[str, str]:
+    """记录 Git 身份；轻量云端流程不再因工作区状态阻止训练。"""
     branch = git_output("branch", "--show-current")
     commit = git_output("rev-parse", "HEAD")
-    # ignored 的本地笔记不会出现，但未跟踪的源码/YAML 必须被发现，
-    # 否则可能训练出无法用某个 commit 复现的模型。
     status = git_output("status", "--porcelain", "--untracked-files=all")
-
-    if status and not dry_run:
-        raise RuntimeError(
-            "Git 中存在未提交的受跟踪改动，正式训练已拒绝启动。\n"
-            "请先检查、提交源码和模型配置，再重新训练。\n"
-            f"当前状态：\n{status}"
-        )
-    if status and dry_run:
-        print("[WARN] dry-run 检测到未提交改动；正式训练时必须先提交。")
+    if status:
+        print("[WARN] Git 工作区存在改动；训练仍会继续，commit 信息仅供记录。")
     return branch or "detached", commit
 
 
 def verify_ultralytics_source() -> tuple[Any, str, Path]:
-    """确保训练导入的是本项目可编辑安装源码，而不是其他环境中的副本。"""
+    """直接优先导入仓库源码，不要求云端重复执行 pip install -e。"""
+    source_path = str(SOURCE_ROOT)
+    if source_path not in sys.path:
+        sys.path.insert(0, source_path)
     import ultralytics
     from ultralytics import YOLO
 
@@ -202,22 +205,16 @@ def verify_ultralytics_source() -> tuple[Any, str, Path]:
             "当前 Python 没有导入本项目源码，已拒绝训练。\n"
             f"实际：{package_file}\n"
             f"期望：{expected_package}\n"
-            f"请在 yolo26 环境中执行：cd {SOURCE_ROOT} && pip install -e ."
+            "请确认从 Git 仓库根目录执行 scripts/train_yolo26_seg.py。"
         )
     return YOLO, str(ultralytics.__version__), package_file
 
 
-def verify_data_yaml(path: Path, expected_hash: str) -> dict[str, Any]:
-    """检查数据配置没有在不同实验之间发生变化。"""
+def verify_data_yaml(path: Path) -> tuple[dict[str, Any], str]:
+    """只检查训练所需字段和类别；允许 Windows/Linux 使用不同根路径。"""
     if not path.is_file():
         raise FileNotFoundError(f"数据集 YAML 不存在：{path}")
     actual_hash = sha256_file(path)
-    if actual_hash != expected_hash:
-        raise RuntimeError(
-            "数据集 YAML 与 Baseline 不一致，已拒绝启动。\n"
-            f"期望：{expected_hash}\n"
-            f"实际：{actual_hash}"
-        )
     with path.open("r", encoding="utf-8") as file:
         data = yaml.safe_load(file)
     required = {"path", "train", "val", "test", "nc", "names"}
@@ -226,12 +223,63 @@ def verify_data_yaml(path: Path, expected_hash: str) -> dict[str, Any]:
         raise ValueError(f"数据集 YAML 缺少字段：{', '.join(missing)}")
     if data["nc"] != 2:
         raise ValueError(f"Baseline 数据集应为 2 类，实际 nc={data['nc']}")
-    return data
+    return data, actual_hash
 
 
-def verify_dataset_content(path: Path, profile: dict[str, Any]) -> dict[str, Any]:
-    """校验 data-v2 文件内容、原图分组隔离和标签结构。"""
-    print("[INFO] 正在校验 data-v2 内容指纹（只读取，不修改）...")
+def _dataset_root(data_yaml: Path, data: dict[str, Any]) -> Path:
+    """解析数据根目录，同时兼容 Windows 和 Linux YAML。"""
+    root = Path(str(data["path"])).expanduser()
+    if not root.is_absolute():
+        root = data_yaml.parent / root
+    return root.resolve()
+
+
+def verify_dataset_quick(
+    path: Path,
+    data: dict[str, Any],
+    profile: dict[str, Any],
+) -> dict[str, Any]:
+    """默认轻量检查：目录存在且图片/标签数量符合 data-v2 profile。"""
+    root = _dataset_root(path, data)
+    images_by_split: dict[str, int] = {}
+    labels_by_split: dict[str, int] = {}
+    for split in ("train", "val", "test"):
+        image_dir = (root / str(data[split])).resolve()
+        label_dir = root / "labels" / split
+        if not image_dir.is_dir() or not label_dir.is_dir():
+            raise FileNotFoundError(
+                f"data-v2 缺少 {split} 目录：images={image_dir}, labels={label_dir}"
+            )
+        images_by_split[split] = sum(
+            1 for item in image_dir.iterdir() if item.is_file() and item.suffix.lower() in IMAGE_SUFFIXES
+        )
+        labels_by_split[split] = sum(1 for item in label_dir.glob("*.txt") if item.is_file())
+
+    expected = profile["dataset_summary"]
+    if images_by_split != expected["images"] or labels_by_split != expected["labels"]:
+        raise RuntimeError(
+            "data-v2 文件数量与 profile 不一致。\n"
+            f"期望图片：{expected['images']}，实际：{images_by_split}\n"
+            f"期望标签：{expected['labels']}，实际：{labels_by_split}"
+        )
+    return {
+        "dataset_id": profile["dataset_id"],
+        "dataset_root": str(root),
+        "dataset_content_sha256": "NOT_CHECKED_QUICK_MODE",
+        "images_by_split": images_by_split,
+        "labels_by_split": labels_by_split,
+        "empty_labels_by_split": {},
+        "objects_by_split_and_class": {},
+        "parent_groups": None,
+        "parent_groups_crossing_splits": None,
+        "exact_image_hashes_crossing_splits": None,
+        "issue_count": None,
+    }
+
+
+def verify_dataset_strict(path: Path, profile: dict[str, Any]) -> dict[str, Any]:
+    """可选严格检查：验证完整内容哈希、标签结构和跨 split 泄漏。"""
+    print("[INFO] strict-checks：正在计算 data-v2 全量内容指纹...")
     report = audit_yolo_seg_dataset(path, dataset_id=str(profile["dataset_id"]))
     expected_hash = str(profile["dataset_content_sha256"])
     if report["dataset_content_sha256"] != expected_hash:
@@ -272,28 +320,49 @@ def verify_weight(path: Path, expected_hash: str) -> str:
     return actual_hash
 
 
+def ensure_weight(path: Path) -> Path:
+    """本地没有官方 m-seg 权重时自动下载，避免云端手动上传权重。"""
+    if path.is_file():
+        return path
+    if path.name != "yolo26m-seg.pt":
+        raise FileNotFoundError(f"模型权重不存在：{path}")
+    from ultralytics.utils.downloads import attempt_download_asset
+
+    print(f"[INFO] 未找到 {path.name}，正在从 Ultralytics 官方资产自动下载...")
+    downloaded = Path(attempt_download_asset(path)).resolve()
+    if not downloaded.is_file():
+        raise FileNotFoundError(
+            f"自动下载 {path.name} 失败，请检查云服务器网络：{downloaded}"
+        )
+    return downloaded
+
+
 def build_model(
     yolo_class: Any,
     model_path: Path,
     pretrained_path: Path | None,
     baseline_weight_hash: str,
-) -> tuple[Any, str]:
+    strict_checks: bool,
+) -> tuple[Any, str, Path, Path | None]:
     """构建 Baseline 或自定义 YAML 模型，不包含任何改进专用代码。"""
-    if not model_path.is_file():
-        raise FileNotFoundError(f"模型文件不存在：{model_path}")
-
     suffix = model_path.suffix.lower()
     if suffix in {".yaml", ".yml"}:
+        if not model_path.is_file():
+            raise FileNotFoundError(f"模型 YAML 不存在：{model_path}")
         if pretrained_path is None:
             raise ValueError("自定义模型 YAML 必须通过 --pretrained 指定 Baseline 预训练权重。")
-        verify_weight(pretrained_path, baseline_weight_hash)
+        pretrained_path = ensure_weight(pretrained_path)
+        if strict_checks:
+            verify_weight(pretrained_path, baseline_weight_hash)
         model = yolo_class(str(model_path))
         model.load(str(pretrained_path))
         mode = "custom-yaml + baseline-pretrained"
     elif suffix == ".pt":
         if pretrained_path is not None:
             raise ValueError(".pt 模型不应再同时传入 --pretrained。")
-        verify_weight(model_path, baseline_weight_hash)
+        model_path = ensure_weight(model_path)
+        if strict_checks:
+            verify_weight(model_path, baseline_weight_hash)
         model = yolo_class(str(model_path))
         mode = "baseline-pretrained-pt"
     else:
@@ -301,10 +370,10 @@ def build_model(
 
     if getattr(model, "task", None) != "segment":
         raise RuntimeError(f"模型任务必须是 segment，实际为：{getattr(model, 'task', None)}")
-    return model, mode
+    return model, mode, model_path, pretrained_path
 
 
-def make_run_name(experiment: str, custom_name: str | None) -> str:
+def make_run_name(experiment: str, custom_name: str | None, preflight10: bool) -> str:
     """生成可读、可追溯且不会覆盖旧实验的目录名。"""
     if custom_name:
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", custom_name):
@@ -314,8 +383,9 @@ def make_run_name(experiment: str, custom_name: str | None) -> str:
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", experiment):
         raise ValueError("--experiment 只能使用小写字母、数字、下划线和连字符。")
     tag = "" if experiment == "baseline" else f"_{experiment.replace('-', '_')}"
+    preflight_tag = "_preflight10" if preflight10 else ""
     timestamp = time.strftime("%Y%m%d_%H%M%S")
-    return f"yolo26m{tag}_seg_{timestamp}"
+    return f"yolo26m{tag}{preflight_tag}_seg_{timestamp}"
 
 
 def print_summary(
@@ -326,10 +396,13 @@ def print_summary(
     pretrained_path: Path | None,
     model_mode: str,
     data_path: Path,
+    data_yaml_hash: str,
     profile: dict[str, Any],
     train_args: dict[str, Any],
     train_hash: str,
     dataset_report: dict[str, Any],
+    run_kind: str,
+    checks_mode: str,
     branch: str,
     commit: str,
     package_file: Path,
@@ -337,15 +410,20 @@ def print_summary(
     """在真正训练前完整显示公平对比信息。"""
     print("\n========== YOLO26 Fair Training Config ==========")
     print(f"Experiment       : {experiment}")
+    print(f"Run kind         : {run_kind}")
+    print(f"Checks           : {checks_mode}")
     print(f"Run name         : {run_name}")
     print(f"Model            : {model_path}")
     print(f"Model mode       : {model_mode}")
     print(f"Pretrained       : {pretrained_path or model_path}")
     print(f"Data             : {data_path}")
+    print(f"Data YAML SHA256 : {data_yaml_hash}")
     print(f"Profile          : {profile['profile_id']}")
     print(f"Profile SHA256   : {train_hash}")
     print(f"Dataset ID       : {profile['dataset_id']}")
     print(f"Dataset SHA256   : {dataset_report['dataset_content_sha256']}")
+    if checks_mode == "quick":
+        print(f"Expected SHA256  : {profile['dataset_content_sha256']} (not recomputed)")
     print(f"Dataset images   : {dataset_report['images_by_split']}")
     print(f"Parent leakage   : {dataset_report['parent_groups_crossing_splits']}")
     print(f"Git branch       : {branch}")
@@ -378,9 +456,13 @@ def write_manifest(
     model_path: Path,
     pretrained_path: Path | None,
     data_path: Path,
+    data_yaml_hash: str,
     profile: dict[str, Any],
     train_hash: str,
+    effective_train_args: dict[str, Any],
     dataset_report: dict[str, Any],
+    run_kind: str,
+    checks_mode: str,
     branch: str,
     commit: str,
 ) -> None:
@@ -392,11 +474,18 @@ def write_manifest(
         "git_commit": commit,
         "model": str(model_path),
         "pretrained": str(pretrained_path or model_path),
-        "pretrained_sha256": profile["baseline_weight_sha256"],
+        "pretrained_sha256": (
+            profile["baseline_weight_sha256"]
+            if checks_mode == "strict"
+            else "NOT_CHECKED_QUICK_MODE"
+        ),
+        "expected_pretrained_sha256": profile["baseline_weight_sha256"],
         "data": str(data_path),
         "dataset_id": profile["dataset_id"],
-        "dataset_yaml_sha256": profile["dataset_yaml_sha256"],
+        "dataset_yaml_sha256": data_yaml_hash,
         "dataset_content_sha256": dataset_report["dataset_content_sha256"],
+        "expected_dataset_content_sha256": profile["dataset_content_sha256"],
+        "checks_mode": checks_mode,
         "dataset_summary": {
             "images_by_split": dataset_report["images_by_split"],
             "labels_by_split": dataset_report["labels_by_split"],
@@ -409,15 +498,15 @@ def write_manifest(
         },
         "baseline_profile": profile["profile_id"],
         "train_args_sha256": train_hash,
-        "effective_train_args_sha256": train_hash,
-        "run_kind": "formal",
-        "formal_comparison_eligible": True,
+        "effective_train_args_sha256": canonical_hash(effective_train_args),
+        "run_kind": run_kind,
+        "formal_comparison_eligible": run_kind == "formal",
         "paired_comparison_group": profile["paired_comparison_group"],
         "profile_epochs": int(profile["train"]["epochs"]),
-        "effective_epochs": int(profile["train"]["epochs"]),
+        "effective_epochs": int(effective_train_args["epochs"]),
         "profile_batch": int(profile["train"]["batch"]),
-        "effective_batch": int(profile["train"]["batch"]),
-        "runtime_overrides": {},
+        "effective_batch": int(effective_train_args["batch"]),
+        "runtime_overrides": {"epochs": 10} if run_kind == "preflight-10-epoch" else {},
     }
     path = save_dir / "experiment_manifest.json"
     path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -431,9 +520,14 @@ def main() -> None:
     data_path = resolve_path(args.data)
 
     profile, train_args, train_hash = load_baseline_profile()
-    run_name = make_run_name(args.experiment, args.run_name)
+    run_kind = "preflight-10-epoch" if args.preflight10 else "formal"
+    checks_mode = "strict" if args.strict_checks else "quick"
+    effective_train_args = dict(train_args)
+    if args.preflight10:
+        effective_train_args["epochs"] = 10
+    run_name = make_run_name(args.experiment, args.run_name, args.preflight10)
 
-    branch, commit = verify_git_state(args.dry_run)
+    branch, commit = read_git_state()
     yolo_class, version, package_file = verify_ultralytics_source()
 
     expected_version = str(profile["ultralytics_version"])
@@ -442,13 +536,18 @@ def main() -> None:
             f"Ultralytics 版本不一致：期望 {expected_version}，实际 {version}。"
         )
 
-    verify_data_yaml(data_path, str(profile["dataset_yaml_sha256"]))
-    dataset_report = verify_dataset_content(data_path, profile)
-    model, model_mode = build_model(
+    data, data_yaml_hash = verify_data_yaml(data_path)
+    dataset_report = (
+        verify_dataset_strict(data_path, profile)
+        if args.strict_checks
+        else verify_dataset_quick(data_path, data, profile)
+    )
+    model, model_mode, model_path, pretrained_path = build_model(
         yolo_class,
         model_path,
         pretrained_path,
         str(profile["baseline_weight_sha256"]),
+        args.strict_checks,
     )
 
     print_summary(
@@ -458,22 +557,19 @@ def main() -> None:
         pretrained_path=pretrained_path,
         model_mode=model_mode,
         data_path=data_path,
+        data_yaml_hash=data_yaml_hash,
         profile=profile,
-        train_args=train_args,
+        train_args=effective_train_args,
         train_hash=train_hash,
         dataset_report=dataset_report,
+        run_kind=run_kind,
+        checks_mode=checks_mode,
         branch=branch,
         commit=commit,
         package_file=package_file,
     )
 
-    if args.dry_run:
-        model.info(verbose=False)
-        print("[DRY-RUN] 所有检查通过，未启动训练。")
-        return
-
-    # 复制后再加入运行时路径参数，避免修改从 profile 读取的锁定字典。
-    runtime_args = dict(train_args)
+    runtime_args = dict(effective_train_args)
     runtime_args.update(data=str(data_path), name=run_name)
     results = model.train(**runtime_args)
     save_dir = Path(results.save_dir).resolve()
@@ -485,9 +581,13 @@ def main() -> None:
         model_path=model_path,
         pretrained_path=pretrained_path,
         data_path=data_path,
+        data_yaml_hash=data_yaml_hash,
         profile=profile,
         train_hash=train_hash,
+        effective_train_args=effective_train_args,
         dataset_report=dataset_report,
+        run_kind=run_kind,
+        checks_mode=checks_mode,
         branch=branch,
         commit=commit,
     )
@@ -495,7 +595,10 @@ def main() -> None:
     best_path = save_dir / "weights" / "best.pt"
     print("\n[INFO] Training complete.")
     print(f"[INFO] Artifacts: {save_dir}")
-    print("[NOTICE] 本次是 data-v2 / batch=8 正式 Baseline，只能与相同数据指纹和 profile 的改进实验严格比较。")
+    if args.preflight10:
+        print("[NOTICE] 本次是10 epoch预检，只用于确认云端流程，不写入正式指标表。")
+    else:
+        print("[NOTICE] 本次是 data-v2 / batch=8 正式 Baseline。")
     print("[INFO] 正式对比请使用 best.pt 单独执行 split=val：")
     print(f"  yolo segment val model=\"{best_path}\" data=\"{data_path}\" split=val")
 
