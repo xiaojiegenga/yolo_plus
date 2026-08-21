@@ -2,7 +2,7 @@
 
 ## 1. 实验身份
 
-- 状态：代码与数据门禁已准备，尚未开始正式训练
+- 状态：正式训练已完成，可作为 `data-v2-batch8` 后续实验的严格 Baseline
 - 准备日期：2026-08-20
 - Git 分支：`data-v2/main`
 - 实验标识：`data-v2-baseline-b8`
@@ -90,17 +90,85 @@ python scripts/cloud_train_data_v2.py
 
 助手不得代替用户执行正式训练命令。
 
-## 5. 正式结果（待训练后填写）
+## 5. 2026-08-21：正式训练结果
 
-| 指标 | All | Rice leaffolder | Rice stemborers |
+### 结论先行
+
+本次正式运行身份、参数和产物均正确，可以作为后续 **data-v2 / batch=8** 源码改进实验的
+唯一严格 Baseline。训练在 epoch 259 取得最佳 fitness，并在 epoch 359 触发 patience=100 的
+EarlyStopping；日志未出现 NaN/Inf，应使用 `best.pt`，不使用性能已经波动回落的 `last.pt`。
+
+### 运行身份与资源
+
+| 项目 | 记录 |
+|---|---|
+| Run 目录 | `runs/segment/runs_seg/yolo26m_data_v2_baseline_b8_seg_20260821_002538` |
+| Git branch / commit | `data-v2/main` / `a1b30908dd4e26f7083e1a2c0917aa951abfaa1f` |
+| Run kind | `formal` |
+| Paired comparison group | `data-v2-batch8` |
+| 模型 | 官方 `YOLO26m-seg`，不含 CBAM/P2/Dice |
+| 计划 / 实际 epoch | 400 / 359（EarlyStopping） |
+| Best epoch | 259 |
+| 总训练时间 | 15,176.4 s，约 4 h 12 min 56 s（4.216 h） |
+| Fused Params / FLOPs | 23,509,010（23.509 M）/ 121.2 G |
+| 推理时间 | 7.8 ms/image |
+| `best.pt` 大小 | 54.53 MB（十进制）/ 52.00 MiB |
+
+### `best.pt` 正式 Val 指标
+
+| 类别 | Images | Instances | Box P | Box R | Box mAP50 | Box mAP50-95 | Mask P | Mask R | Mask F1¹ | Mask mAP50 | Mask mAP50-95 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| all | 117 | 557 | 0.695 | 0.629 | 0.723 | 0.451 | 0.694 | 0.605 | 0.646 | 0.708 | 0.374 |
+| Rice leaffolder | 87 | 462 | 0.686 | 0.617 | 0.703 | 0.401 | 0.698 | 0.600 | 0.645 | 0.689 | 0.318 |
+| Rice stemborers | 38 | 95 | 0.704 | 0.642 | 0.743 | 0.502 | 0.690 | 0.611 | 0.648 | 0.727 | 0.430 |
+
+¹ Mask F1 使用表中 P/R 按 `2PR/(P+R)` 计算，仅作辅助读数。机器可读指标保存在同目录
+`val_metrics.csv`。
+
+### 训练过程检查
+
+- `results.csv` 包含 epoch 1～359，共 359 行，无缺失轮次和 NaN/Inf；
+- epoch 259 的 Box mAP50-95=`0.45172`、Mask mAP50-95=`0.37344`，二者之和
+  fitness=`0.82516`，为全程最高；
+- epoch 259 的 CSV 指标与训练结束后重新载入 `best.pt` 的最终 Val 输出一致（仅存在显示精度差异）；
+- 10 epoch 预检的 Overall Mask mAP50/mAP50-95 为 `0.594/0.295`，正式最佳权重达到
+  `0.708/0.374`，说明模型后续训练仍带来明显收益；
+- 最后一轮 epoch 359 的 Overall Mask mAP50/mAP50-95 为 `0.702/0.360`，仍保持正常，
+  但低于最佳轮次，因此正式报告统一使用 `best.pt`。
+
+### 产物校验
+
+| 产物 | SHA256 |
+|---|---|
+| `best.pt` | `254D3F4C2FF0CE71F92713FFAC8553F85665E6F1347A6E3551AC8B9F499076BE` |
+| `last.pt` | `2B1B44B35DD21C800EA452C07B6693DC824C27564B8272376D729315280ED1CC` |
+| `results.csv` | `7173A786B5BEC1AF9496223190AB41C0EA124D68D5428C356D90ECEDAA650216` |
+| `args.yaml` | `6A91AD33103C9C46471AD09EB5C31761E9A180834212ECBCA9B5CDC87185AD37` |
+| `experiment_manifest.json` | `15F50E73076CB4449F36B5E50CA846CA756033F227A47FD6F0334382CB1E9D97` |
+
+`best.pt`、`last.pt` 和完整 run 仅保存在本地/用户备份中，不上传 Git。
+
+### 与 data-v1 Baseline-b4 的描述性观察
+
+| Mask 指标 | data-v1-b4 | data-v2-b8 | 差值 |
 |---|---:|---:|---:|
-| Mask Precision | 待填写 | 待填写 | 待填写 |
-| Mask Recall | 待填写 | 待填写 | 待填写 |
-| Mask mAP50 | 待填写 | 待填写 | 待填写 |
-| Mask mAP50-95 | 待填写 | 待填写 | 待填写 |
+| Overall P | 0.717 | 0.694 | -0.023 |
+| Overall R | 0.586 | 0.605 | +0.019 |
+| Overall mAP50 | 0.657 | 0.708 | +0.051 |
+| Overall mAP50-95 | 0.310 | 0.374 | +0.064 |
+| Leaffolder P / R | 0.671 / 0.600 | 0.698 / 0.600 | +0.027 / 0.000 |
+| Leaffolder mAP50 / mAP50-95 | 0.670 / 0.302 | 0.689 / 0.318 | +0.019 / +0.016 |
+| Stemborers P / R | 0.763 / 0.571 | 0.690 / 0.611 | -0.073 / +0.040 |
+| Stemborers mAP50 / mAP50-95 | 0.644 / 0.319 | 0.727 / 0.430 | +0.083 / +0.111 |
 
-- 最佳 epoch：待填写
-- 实际完成 epoch：待填写
-- 训练耗时：待填写
-- 正式 run 路径：待填写
-- `best.pt`：仅本地/云端备份，不上传 Git
+> 比较边界：data-v1 与 data-v2 的数据内容、Val 样本数量以及 batch 分别不同，因此这里仅描述
+> 结果变化，不能把差值归因于某一项数据处理或 batch。源码改进的收益必须在
+> `data-v2-batch8` 组内与本 Baseline 配对比较。
+
+### 后续实验边界
+
+1. data-v2 后续模型必须使用相同数据内容指纹、训练 profile、`batch=8`、`imgsz=640` 和 Val；
+2. 当前 Overall Mask mAP50=`0.708`、mAP50-95=`0.374` 是后续源码改进必须超过的主要基线；
+3. 卷叶螟 Mask Recall=`0.600`，仍是下一阶段需要重点提升的指标；
+4. 不在模型和训练方案冻结前使用 test 反复调参；最终方案确定后再统一执行一次独立 test；
+5. 原始 run 由用户自行复制到本地 `results/` 或外部存储备份，Git 只保存本轻量记录。
