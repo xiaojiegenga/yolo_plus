@@ -1,14 +1,11 @@
-"""data-v2 云服务器简化启动入口。
+"""data-v2 云服务器启动入口。
 
-使用方式：
-    # 10 epoch预检
+示例：
     python scripts/cloud_train_data_v2.py --preflight10
+    python scripts/cloud_train_data_v2.py --run-name data-v2-5090-baseline
 
-    # 400 epoch正式训练
-    python scripts/cloud_train_data_v2.py
-
-公共GPU镜像必须预装可用的CUDA版PyTorch。本脚本只在其余Ultralytics依赖缺失时，
-自动执行一次 ``pip install -e ultralytics-main``，然后调用统一训练入口。
+脚本保留镜像自带的 CUDA PyTorch；仅在其他运行依赖缺失时安装仓库内
+Ultralytics，然后调用统一训练入口。它不执行数据或文件哈希检查。
 """
 
 from __future__ import annotations
@@ -25,11 +22,10 @@ TRAIN_SCRIPT = REPO_ROOT / "scripts" / "train_yolo26_seg.py"
 
 
 def ensure_cloud_runtime() -> None:
-    """保留镜像自带CUDA PyTorch，只补齐其余项目依赖。"""
+    """保留镜像自带的 CUDA PyTorch，只补齐其余项目依赖。"""
     if importlib.util.find_spec("torch") is None:
         raise RuntimeError(
-            "当前镜像没有PyTorch。请重新选择预装CUDA版PyTorch的GPU镜像，"
-            "不要让本脚本自动安装可能不匹配的torch。"
+            "当前镜像没有 PyTorch。请使用预装 CUDA 版 PyTorch 的 GPU 镜像。"
         )
 
     required_modules = (
@@ -44,11 +40,13 @@ def ensure_cloud_runtime() -> None:
         "torchvision",
         "polars",
     )
-    missing = [name for name in required_modules if importlib.util.find_spec(name) is None]
+    missing = [
+        name for name in required_modules if importlib.util.find_spec(name) is None
+    ]
     if not missing:
         return
 
-    print(f"[SETUP] 缺少依赖 {missing}，正在安装仓库内Ultralytics及其依赖...")
+    print(f"[SETUP] 缺少依赖 {missing}，安装仓库内 Ultralytics...")
     subprocess.run(
         [sys.executable, "-m", "pip", "install", "-e", str(SOURCE_ROOT)],
         cwd=REPO_ROOT,
@@ -59,7 +57,13 @@ def ensure_cloud_runtime() -> None:
 def main() -> None:
     ensure_cloud_runtime()
     command = [sys.executable, str(TRAIN_SCRIPT), *sys.argv[1:]]
-    raise SystemExit(subprocess.call(command, cwd=REPO_ROOT))
+    exit_code = subprocess.call(command, cwd=REPO_ROOT)
+    if exit_code == 0:
+        print(
+            "[CLOUD NEXT] 使用 python scripts/transfer_run.py pack "
+            "--run-id <run-id> 打包训练结果。"
+        )
+    raise SystemExit(exit_code)
 
 
 if __name__ == "__main__":

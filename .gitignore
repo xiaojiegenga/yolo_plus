@@ -1,52 +1,67 @@
 # Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
 *.egg-info/
-dist/
-build/
-
-# Model weights and exported checkpoints
-*.pt
-*.pth
-
-# Raw training and validation outputs
-/runs/
-/runs_seg/
-
-# User-managed local experiment archive
-# Baseline/V1 and future successful raw runs are copied here manually.
-# This directory must remain local and must not be uploaded to Git.
-/results/
-
-# Frequently updated project notes and AI context
-# Keep these files local so branch switching and rollback do not change them.
-# Only formal experiment records under /experiment_records/ remain tracked.
-/*.md
-/experiments/*.md
-/scripts/*.md
-
-# Local safety copies created during project maintenance
-/.local_backups/
-
-# Local assistant/editor state
-/.claude/
-.vscode/
-.idea/
-
-# System files
-.DS_Store
-Thumbs.db
-
-# Jupyter
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .ipynb_checkpoints/
 
-# Dataset config containing machine-specific paths
-yolo_data.yaml
-/experiments/*.local.yaml
+# Local environments
+.venv/
+venv/
+env/
+.env
+.env.*
 
-# Conda environment metadata
-conda-meta/
+# Model files and exports
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.engine
+*.safetensors
 
-# Logs
+# Local dataset and complete raw training output
+/data/*
+!/data/README.md
+/runs/*
+!/runs/README.md
+/exports/
+/runs_seg/
+/results/
+/weights/
+
+# Outputs accidentally created inside the source tree
+/ultralytics-main/runs/
+/ultralytics-main/datasets/
+/ultralytics-main/weights/
+
+# Logs, caches and experiment trackers
 *.log
+*.tmp
+*.temp
+cache/
+.cache/
+wandb/
+mlruns/
+tensorboard/
+
+# Machine-specific files and secrets
+/experiments/*.local.yaml
+/*.local.md
+*.local.json
+*.local.toml
+*.pem
+*.key
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Large transfer archives
+*.tar
+*.tar.gz
+*.zip
+*.7z

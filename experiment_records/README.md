@@ -1,61 +1,20 @@
-# 实验记录目录
+# experiment_records
 
-本目录保存可提交 Git、可复查、可用于论文整理的轻量实验记录。
+本目录只在本地电脑维护，保存可提交 Git 的轻量实验记录。
 
-它与本地 `results/` 的职责不同：
+- `runs/_template.md`：新 Run 记录模板。
+- `runs/<run-id>.md`：新实验的参数、结果及全部分析文字。
+- `comparison.csv`：从 `results.csv` 回填的机器可读汇总表。
+- 其他已有子目录：旧仓库的历史实验记录，保持原位。
 
-| 目录 | 维护者 | 内容 | 上传 Git |
-|---|---|---|---|
-| `results/` | 用户 | 完整原始训练输出、权重、图片 | 否 |
-| `experiment_records/` | 助手持续维护 | 指标、配置摘要、commit、结论 | 是 |
+云服务器不修改本目录。完整 Run 回传并解包到本地 `runs/<run-id>/` 后，再运行：
 
-`experiment_records/` 是项目级 Markdown 的唯一 Git 上传白名单。学习笔记、AI 上下文、排错草稿和日常过程记录不得放入本目录。
-
-## 目录规范
-
-每个实验使用：
-
-```text
-<experiment>/
-└─ run_record.md
+```powershell
+python scripts/fill_results_table.py --run-dir runs/<run-id> --run-id <run-id>
 ```
 
-正式训练后，按需要增加：
+随后根据 `args.yaml`、`results.csv` 和验证输出填写 Run 记录。不需要附加哈希、
+manifest 或备份证明。
 
-```text
-<experiment>/
-├─ run_record.md
-├─ val_metrics.json
-├─ model_info.txt
-└─ best_pt_sha256.txt
-```
-
-禁止在这里提交：
-
-- `.pt`、`.pth`；
-- 完整训练图片；
-- 数据集；
-- 包含本机隐私路径的未清理配置。
-
-## 更新时机
-
-只在关键实验节点更新并提交：
-
-1. 源码改动已经提交；
-2. 训练或短跑已经实际完成；
-3. 独立 `val` 指标已经生成；
-4. 指标、配置和权重来源能够追溯；
-5. 结论已区分“确认事实”和“待验证推测”。
-
-普通学习过程、AI 分析和频繁变化的计划只写入本地笔记，不上传 GitHub。
-
-## 指标规则
-
-正式对比统一使用：
-
-- `best.pt`
-- `task=segment`
-- `split=val`
-- 相同数据集和验证参数
-
-`results.csv` 只用于分析训练过程，不和独立 `val` 指标混为一组。
+`云服务器实验设计与记录表.md` 只保存所有实验的表格数据，不写实验原因、结果解释
+或结论段落。

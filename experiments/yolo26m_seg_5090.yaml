@@ -1,0 +1,29 @@
+# RTX 5090 上的 data-v2 基础配置。
+# batch=8 是保守起点，可在 10 epoch 预检后为后续配对实验统一调整。
+
+experiment: data-v2-5090-baseline
+model: yolo26m-seg.pt
+data: experiments/yolo_data_v2_cloud.yaml
+
+train:
+  epochs: 400
+  patience: 100
+  batch: 8
+  imgsz: 640
+  device: "0"
+  workers: 8
+  cache: false
+  optimizer: auto
+  seed: 42
+  deterministic: true
+  amp: true
+  val: true
+  split: val
+  plots: true
+  close_mosaic: 15
+  mosaic: 1.0
+  mixup: 0.1
+  copy_paste: 0.3
+  mask_ratio: 4
+  project: runs
+  exist_ok: false
