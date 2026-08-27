@@ -12,12 +12,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 `cloud/data-v2-5090`）。数据集 `rice-pest-data-v2`，2 类（`Rice leaffolder`、
 `Rice stemborers`），主选择指标为 **Val Mask mAP50-95**。
 
-开始任何工作前，先完整阅读（按顺序）：
+开始任何工作前，先按顺序阅读（`PROGRESS.md` 是快速了解当前进展的入口，其余是规则与背景）：
 
-1. `云服务器实验项目交接.md`
-2. `云服务器实验设计与记录表.md`
-3. `AGENTS.md`
-4. 本次涉及目录里的 `README.md`
+1. `PROGRESS.md`（当前进展快照）
+2. `云服务器实验项目交接.md`
+3. `云服务器实验设计与记录表.md`
+4. `AGENTS.md`
+5. 本次涉及目录里的 `README.md`
 
 用户当前指令优先于以上文档；已有历史结果不得因整理目录被改写。
 
