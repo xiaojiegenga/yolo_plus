@@ -1,12 +1,11 @@
-# RTX 5090 上的 data-v2 YOLO26m 参数优化配置（第 1 轮组合）。
-# 相对首轮基线 data-v2-scale-y26m-seg-b16-s42 的改动：
-#   epochs 400→300；新增 degrees=15、flipud=0.5、scale=0.3。
-# batch 保持 16（为后续消融实验单变量原则，含尺度对比 l 模型与源码改动实验在内统一 batch=16）。
-# 分辨率固定 640（本次决定不做 imgsz 832 实验）。
-# optimizer=auto 在 batch=16 / epochs=300 下 iterations≈4500（<10000），
-# 仍自动选择 AdamW（lr≈0.001667、momentum=0.9），与基线一致。
+# RTX 5090 上的 data-v2 YOLO26m 参数优化配置（第 2 轮掩膜精调）。
+# 继承第 1 轮 data-v2-tune-e300-b16-s42 已验证有效的训练日程与航拍增强。
+# 本轮实质改动：mask_ratio 4→2、mixup 0.1→0.0。
+# optimizer/lr/momentum/weight_decay 显式锁定为第 1 轮 optimizer=auto 的实际选择，
+# 只为提高复现性，不作为本轮新增调参因素。
+# batch 保持 16，分辨率固定 640，warmup 保持 3。
 
-experiment: data-v2-tune-e300-b16-s42
+experiment: data-v2-tune-mr2-nomix-e300-b16-s42
 model: yolo26m-seg.pt
 data: experiments/yolo_data_v2_cloud.yaml
 
@@ -18,7 +17,13 @@ train:
   device: "0"
   workers: 8
   cache: false
-  optimizer: auto
+  optimizer: AdamW
+  lr0: 0.001667
+  lrf: 0.01
+  momentum: 0.9
+  weight_decay: 0.0005
+  warmup_epochs: 3
+  cos_lr: false
   seed: 42
   deterministic: true
   amp: true
@@ -27,11 +32,11 @@ train:
   plots: true
   close_mosaic: 15
   mosaic: 1.0
-  mixup: 0.1
+  mixup: 0.0
   copy_paste: 0.3
   degrees: 15
   flipud: 0.5
   scale: 0.3
-  mask_ratio: 4
+  mask_ratio: 2
   project: runs
   exist_ok: false
