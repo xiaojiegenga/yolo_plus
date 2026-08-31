@@ -46,7 +46,7 @@ Run ID：`data-v2-tune-e300-b16-s42`，相对首轮基线 `data-v2-scale-y26m-se
 
 ## 下一步
 
-1. 本地提交并推送配置（`experiments/yolo26m_seg_5090.yaml` 与 `PROGRESS.md`），云端 `git pull --ff-only` 后启动 `data-v2-tune-e300-b16-s42`
+1. 云端 `git pull --ff-only` 后按 `实验步骤.md` 启动 `data-v2-tune-e300-b16-s42`（本地已提交推送）
 2. 回传后新增 `parameter_tuning/data-v2-tune-e300-b16-s42.md` 分析并填入总表表 2
 3. 第 2 轮（掩膜精调组合）：`mask_ratio 4→2`、`warmup_epochs 3→5`（分辨率固定 640，不做 imgsz 实验）
 4. 参数方案确定后做多 seed 复验（seed 42/2/3），冻结并填写总表表 1
@@ -54,14 +54,14 @@ Run ID：`data-v2-tune-e300-b16-s42`，相对首轮基线 `data-v2-scale-y26m-se
 
 ## Git 与本地文件状态
 
-- 远端已同步：`cloud/data-v2-5090` @ `60f070a`。
-- 本次改动（均尚未提交或推送）：
+- 已提交并推送：分支 `cloud/data-v2-5090`。真实 git 工作区已迁移到 `e:\Study\论文撰写\yolo_plus_git`；本夸克目录（`模型训练`）不含 `.git/`，只用于编辑与夸克同步。
+- 本次提交内容：
   - `experiments/yolo26m_seg_5090.yaml`：第 1 轮组合参数（epochs=300、degrees=15、flipud=0.5、scale=0.3，batch 保持 16）
   - `PROGRESS.md`：进展快照更新
   - `云服务器实验项目交接.md`：云端命令、当前进展、下一步同步
   - `实验步骤.md`：新增，云端训练操作手册（从 pull 到打包下载的步骤）
   - `data-v2实验设计与记录表.md`：删除，内容由 `实验步骤.md` 取代
-- 当前夸克同步目录未包含 `.git/`；上述修改需同步到实际 Git clone 后才能提交、推送并供云端拉取。
+- 云端下一步：`git pull --ff-only` 后运行 `data-v2-tune-e300-b16-s42`（步骤见 `实验步骤.md`）。
 - `runs/` 与 `exports/` 按约定不进入 Git。
 
 ## 关键约束（快速提醒）
