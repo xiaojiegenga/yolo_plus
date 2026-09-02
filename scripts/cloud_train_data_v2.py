@@ -58,11 +58,6 @@ def main() -> None:
     ensure_cloud_runtime()
     command = [sys.executable, str(TRAIN_SCRIPT), *sys.argv[1:]]
     exit_code = subprocess.call(command, cwd=REPO_ROOT)
-    if exit_code == 0:
-        print(
-            "[CLOUD NEXT] 使用 python scripts/transfer_run.py pack "
-            "--run-id <run-id> 打包训练结果。"
-        )
     raise SystemExit(exit_code)
 
 

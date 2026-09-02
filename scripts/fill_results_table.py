@@ -13,6 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TABLE = REPO_ROOT / "experiment_records" / "comparison.csv"
 DEFAULT_FIELDS = [
     "version",
+    "data",
     "status",
     "split",
     "mask_p",
@@ -41,6 +42,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-dir", type=Path, required=True)
     parser.add_argument("--run-id", help="汇总表中的名称，默认使用目录名")
+    parser.add_argument(
+        "--data",
+        default="data-v2",
+        help="数据版本，默认使用当前项目的 data-v2",
+    )
     parser.add_argument("--status", default="completed")
     parser.add_argument("--split", default="val")
     parser.add_argument("--branch", default="")
@@ -145,6 +151,7 @@ def build_summary(
     summary.update(
         {
             "version": run_id,
+            "data": cli_args.data,
             "status": cli_args.status,
             "split": cli_args.split,
             "metric_source": relative_source(results_path),

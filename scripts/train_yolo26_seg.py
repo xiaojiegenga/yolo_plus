@@ -6,7 +6,7 @@ import argparse
 import re
 import sys
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 import yaml
@@ -16,6 +16,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SOURCE_ROOT = REPO_ROOT / "ultralytics-main"
 DEFAULT_CONFIG = REPO_ROOT / "experiments" / "yolo26m_seg_5090.yaml"
 RUN_NAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+SCP_HOST = "gtm-adl-westc-connect.seetacloud.com"
+LOCAL_EXPORTS_ROOT = PureWindowsPath(
+    r"E:\study\graduate_sec\论文撰写\模型训练\exports"
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -184,6 +188,28 @@ def run_training(
     return Path(save_dir) if save_dir else Path(runtime["project"]) / runtime["name"]
 
 
+def print_transfer_commands(save_dir: Path) -> None:
+    """打印云端打包、本地 SCP 下载和解包命令。"""
+    run_id = save_dir.name
+    archive_name = f"{run_id}.zip"
+    remote_archive = (REPO_ROOT / "exports" / archive_name).as_posix()
+    local_archive = LOCAL_EXPORTS_ROOT / archive_name
+
+    print("[NEXT 1/3 - CLOUD PACK]")
+    print(f"python scripts/transfer_run.py pack --run-id {run_id}")
+    print("[NEXT 2/3 - LOCAL SCP]")
+    print("在本地 PowerShell 运行，并把 SCP_PORT 替换为实例 SSH 端口：")
+    print(
+        f'scp -P SCP_PORT root@{SCP_HOST}:{remote_archive} '
+        f'"{local_archive}"'
+    )
+    print("[NEXT 3/3 - LOCAL UNPACK]")
+    print(
+        "python scripts/transfer_run.py unpack "
+        f'--archive "exports/{archive_name}"'
+    )
+
+
 def main() -> None:
     cli_args = parse_args()
     expected_run_path, model_source, pretrained, runtime = build_runtime(cli_args)
@@ -193,10 +219,7 @@ def main() -> None:
 
     save_dir = run_training(model_source, pretrained, runtime)
     print(f"[DONE] 原始结果：{save_dir.resolve()}")
-    print(
-        "[NEXT] 云端用 scripts/transfer_run.py pack 打包；"
-        "本地解包后再更新实验记录和汇总表。"
-    )
+    print_transfer_commands(save_dir.resolve())
     if save_dir.resolve() != expected_run_path.resolve():
         print(f"[NOTE] 预期输出目录为：{expected_run_path}")
 

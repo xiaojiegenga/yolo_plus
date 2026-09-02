@@ -21,6 +21,7 @@
 - 图片数：train / val / test = 938 / 117 / 118。
 - 主指标：Val Mask mAP50-95。
 - Val 用于选方案；Test 在方案冻结后统一评估。
+- 正式训练 GPU：RTX 5090（已确定）。
 
 ## 本地、GitHub 与云端职责
 
@@ -39,7 +40,7 @@
 |---|---|---|
 | `experiments/` | 实验参数 YAML | 跟踪 |
 | `scripts/` | 训练、传输和结果回填脚本 | 跟踪 |
-| `experiment_records/` | Run 记录和汇总表 | 跟踪 |
+| `experiment_records/` | 参数优化分析、期刊正式 Run 记录和汇总表 | 跟踪 |
 | `runs/` | 云端生成、本地接收的完整原始结果 | 不跟踪 |
 | `exports/` | 云端打包或本地接收的临时 ZIP | 不跟踪 |
 | `data/` | 数据集或挂载点 | 不跟踪 |
@@ -63,20 +64,30 @@
 4. 用 `scripts/transfer_run.py pack` 把完整 Run 打成 ZIP。
 5. 把 ZIP 传回本地；不在云端填写 `comparison.csv`。
 
-### 本地训练后
+### 本地参数优化训练后
+
+1. 用 `scripts/transfer_run.py unpack` 解包到 `runs/<run-id>/`。
+2. 在 `experiment_records/parameter_tuning/<run-id>.md` 写分析。
+3. 把参数和性能填入 `云服务器实验设计与记录表.md` 表 2。
+4. 不运行 `fill_results_table.py`，不修改 `experiment_records/comparison.csv`。
+
+### 本地期刊正式训练后
 
 1. 用 `scripts/transfer_run.py unpack` 解包到 `runs/<run-id>/`。
 2. 用 `scripts/fill_results_table.py` 更新 `experiment_records/comparison.csv`。
-3. 从模板创建或更新 Run 记录。
-4. 所有实验分析文字写入 `experiment_records/runs/<run-id>.md`；总表只填表格数据。
-5. 提交轻量记录；不提交 `runs/`、`exports/`、数据或权重。
+3. 从模板创建或更新 `experiment_records/runs/<run-id>.md`。
+4. 提交轻量记录；不提交 `runs/`、`exports/`、数据或权重。
 
 当前流程不生成或校验哈希、manifest 或备份证明。
 
+总表表 2 只登记用于决定表 1 的参数优化训练。10 epoch 预检不进入表 2 或
+`experiment_records/comparison.csv`，也不创建单次分析。
+
 ## 操作边界
 
-- 未经用户明确要求，不启动 400 epoch 等长时间训练。
+- 未经用户明确要求，不启动正式长时间训练。
 - 10 epoch 预检不进入论文精度排名。
+- 当前参数优化配置中的 batch、workers、epochs 等值不代表正式训练参数已经冻结。
 - 不覆盖已有 Run、ZIP、权重或历史记录；重跑使用新 Run ID。
 - 不使用 Test 调参。
 - 参数、模型代码或数据口径变化时使用新 Run ID。
@@ -85,7 +96,7 @@
 
 ## 完成检查
 
-- 云端从干净克隆可以读取默认配置并启动训练。
+- 云端从干净克隆可以读取当前参数优化配置并启动训练。
 - 配置顶层 `model`、`data`、`experiment` 与 `train` 参数映射无遗漏。
 - 打包和解包保持 `runs/<run-id>/` 目录结构。
 - 本地表格数值能追溯到回传 Run 的 `results.csv` 或独立验证输出。

@@ -1,8 +1,6 @@
-version,status,split,mask_p,mask_r,mask_map50,mask_map50_95,leaffolder_p,leaffolder_r,leaffolder_ap50,stemborers_p,stemborers_r,stemborers_ap50,git_branch,metric_source,notes
-baseline,completed,val,0.717,0.620,0.683,0.329,0.679,0.482,0.604,0.753,0.755,0.763,main,historical_record,待用统一 best.pt 独立 val 复核
-baseline-b4,completed,val,0.657,0.609,0.656,0.322,0.595,0.523,0.574,0.719,0.694,0.737,codex/baseline-b4,runs/segment/runs_seg/yolo26m_baseline_b4_seg_20260730_160726,与 V2-P2-b4 的严格同 batch 对照
-data-v2-baseline-b8,historical_reference,val,0.694,0.605,0.708,0.374,0.698,0.600,0.689,0.690,0.611,0.727,data-v2/main,experiment_records/data-v2-baseline-b8/val_metrics.csv,旧环境历史参照；best epoch 259；5090 新实验需重跑同环境 Baseline
-v1-cbam,completed,val,0.753,0.633,0.700,0.343,0.662,0.552,0.607,0.844,0.714,0.793,v1-cbam,historical_record,待用统一 best.pt 独立 val 复核
-v2-p2,completed,val,0.650,0.624,0.682,0.335,0.650,0.512,0.589,0.650,0.735,0.775,v2-p2,runs/segment/runs_seg/yolo26m_v2_p2_b4_seg_20260730_022727,正式 batch=4；与 baseline-b4 严格配对
-v3-dice,not_started,val,,,,,,,,,,,v3-dice,not_available,
-v4-combined,not_started,val,,,,,,,,,,,v4-combined,not_available,只组合已验证有效模块
+version,data,status,split,mask_p,mask_r,mask_map50,mask_map50_95,leaffolder_p,leaffolder_r,leaffolder_ap50,stemborers_p,stemborers_r,stemborers_ap50,git_branch,metric_source,notes
+baseline,data-v0,completed,val,0.717,0.620,0.683,0.329,0.679,0.482,0.604,0.753,0.755,0.763,main,historical_record,待用统一 best.pt 独立 val 复核
+baseline-b4,data-v0,completed,val,0.657,0.609,0.656,0.322,0.595,0.523,0.574,0.719,0.694,0.737,codex/baseline-b4,runs/segment/runs_seg/yolo26m_baseline_b4_seg_20260730_160726,与 V2-P2-b4 的严格同 batch 对照
+data-v2-baseline-b8,data-v2,historical_reference,val,0.694,0.605,0.708,0.374,0.698,0.600,0.689,0.690,0.611,0.727,data-v2/main,experiment_records/data-v2-baseline-b8/val_metrics.csv,旧环境历史参照；best epoch 259；5090 新实验需重跑同环境 Baseline
+v1-cbam,data-v0,completed,val,0.753,0.633,0.700,0.343,0.662,0.552,0.607,0.844,0.714,0.793,v1-cbam,historical_record,待用统一 best.pt 独立 val 复核
+v2-p2,data-v0,completed,val,0.650,0.624,0.682,0.335,0.650,0.512,0.589,0.650,0.735,0.775,v2-p2,runs/segment/runs_seg/yolo26m_v2_p2_b4_seg_20260730_022727,正式 batch=4；与 baseline-b4 严格配对

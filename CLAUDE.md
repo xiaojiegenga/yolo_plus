@@ -38,23 +38,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 所有命令在仓库根目录执行。没有测试套件或 lint 配置。
 
 ```bash
+RUN_ID="replace-with-run-id"
+
 # 本地：读取配置，只打印最终参数、不训练（先验证配置）
-python scripts/train_yolo26_seg.py --config experiments/yolo26m_seg_5090.yaml --run-name <id> --dry-run
+python scripts/train_yolo26_seg.py --config experiments/yolo26m_seg_5090.yaml --run-name "${RUN_ID}" --dry-run
 
 # 云端：10 epoch 短预检（只用于兼容性/成本判断，不进论文精度排名）
-python scripts/cloud_train_data_v2.py --preflight10 --run-name <run-id>
+python scripts/cloud_train_data_v2.py --preflight10 --run-name "${RUN_ID}"
 
-# 云端：正式训练（须由用户明确启动，否则不要跑 400 epoch）
-python scripts/cloud_train_data_v2.py --run-name <run-id>
+# 云端：参数优化或正式训练（使用唯一 Run ID，且由用户明确启动）
+python scripts/cloud_train_data_v2.py --run-name "${RUN_ID}"
 
 # 云端：把 runs/<run-id> 打成 exports/<run-id>.zip
-python scripts/transfer_run.py pack --run-id <run-id>
+python scripts/transfer_run.py pack --run-id "${RUN_ID}"
 
 # 本地：解包 ZIP 回 runs/<run-id>/
-python scripts/transfer_run.py unpack --archive exports/<run-id>.zip
+python scripts/transfer_run.py unpack --archive "exports/${RUN_ID}.zip"
 
-# 本地：从 results.csv 回填 experiment_records/comparison.csv
-python scripts/fill_results_table.py --run-dir runs/<run-id> --run-id <run-id>
+# 本地：仅对参数冻结后、用于期刊对比的正式 Run 回填 comparison.csv
+python scripts/fill_results_table.py --run-dir "runs/${RUN_ID}" --run-id "${RUN_ID}"
 ```
 
 `train_yolo26_seg.py` 支持 `--experiment`、`--model`、`--data`、`--pretrained`、
@@ -87,17 +89,19 @@ python scripts/fill_results_table.py --run-dir runs/<run-id> --run-id <run-id>
 `ultralytics-main/` 是 vendored 的 YOLO 源码：入口把该目录插入 `sys.path` 再
 `from ultralytics import YOLO`。改进实验改的是这个目录里的模型源码，不改训练参数。
 
-## 结果回填链条
+## 两类训练结果记录链条
 
-`fill_results_table.py` 是唯一连接原始结果与汇总表的脚本：
+`fill_results_table.py` 只用于正式训练，是连接原始结果与汇总表的脚本：
 
 - 读 `runs/<run-id>/results.csv`；
 - 按 `metrics/mAP50-95(M)` 取最高的一行作为该 Run 的最佳结果；
 - 写出 `mask_p/r/map50/map50_95` 及分类型 P/R/AP 到 `experiment_records/comparison.csv`（upsert，按 `version` 列）。
 
-`comparison.csv` 只放表格数据；每个实验的分析文字写到 `experiment_records/runs/<run-id>.md`
-（模板 `experiment_records/runs/_template.md`）。`云服务器实验设计与记录表.md` 只回填
-计划、参数、状态和结果表格，不写原因/解释/结论。
+参数优化 Run 的分析写到 `experiment_records/parameter_tuning/<run-id>.md`，性能只填
+`云服务器实验设计与记录表.md` 表 2，不运行 `fill_results_table.py`。参数冻结后、可用于
+期刊对比的正式实验才写 `experiment_records/runs/<run-id>.md`（模板
+`experiment_records/runs/_template.md`）并进入 `comparison.csv`。总表只回填计划、参数、
+状态和结果数据，不写原因、解释或结论。
 
 ## 目录约定
 
@@ -105,7 +109,7 @@ python scripts/fill_results_table.py --run-dir runs/<run-id> --run-id <run-id>
 |---|---|---|
 | `experiments/` | 实验参数 YAML | 跟踪 |
 | `scripts/` | 训练、传输、结果回填脚本 | 跟踪 |
-| `experiment_records/` | Run 记录与 `comparison.csv` | 跟踪 |
+| `experiment_records/` | 参数优化分析、期刊正式 Run 记录与 `comparison.csv` | 跟踪 |
 | `ultralytics-main/` | 模型源码 | 跟踪 |
 | `runs/` | 完整原始结果（`args.yaml`、`results.csv`、`weights/` 等） | 不跟踪 |
 | `exports/` | 传输 ZIP | 不跟踪 |
@@ -113,9 +117,10 @@ python scripts/fill_results_table.py --run-dir runs/<run-id> --run-id <run-id>
 
 ## 必须遵守的操作边界
 
-- 未经用户明确要求，不启动 400 epoch 等长时间训练；10 epoch 预检不进论文精度排名。
+- 未经用户明确要求，不启动正式长时间训练；10 epoch 预检不进论文精度排名。
+- 总表表 2 只登记决定表 1 的参数优化训练；10 epoch 预检不进表 2 或 `comparison.csv`。
 - 不覆盖已有 Run、ZIP、权重或历史记录；参数、模型代码或数据口径变化时必须换新 Run ID。
 - Val 用于选方案；Test 只在全部方案冻结后统一评估，不用 Test 调参。
-- batch=8 已锁定为 data-v2 配对实验基准，即使显存更大也不在配对组内改动。
+- RTX 5090 已确定；batch、workers、epochs 等正式参数仍待表 2 参数优化后冻结。
 - 不提交数据、模型权重、完整 `runs/`、`exports/`、凭据或 SSH 配置。
 - 只处理当前任务相关修改，不重置用户工作。

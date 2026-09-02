@@ -12,11 +12,14 @@
         ↓ git clone / pull
 云服务器训练 → runs/<run-id>/ → 打包为 exports/<run-id>.zip
                                       ↓ scp
-本地解包到 runs/<run-id>/ → 分析 → 更新记录和汇总表
+参数优化 Run：本地解包 → 写 parameter_tuning 分析 → 更新总表表 2
+期刊正式 Run：本地解包 → 写正式记录 → 更新 comparison.csv
 ```
 
 本地电脑是代码、实验记录和分析结果的唯一工作台。云服务器只负责拉取代码、
 读取已提交的参数、执行训练和打包 Run，不在云端修改配置或填写实验表格。
+
+当前实验进展先看 `PROGRESS.md`；完整实验表看 `云服务器实验设计与记录表.md`。
 
 ## 项目结构
 
@@ -31,9 +34,9 @@
 └─ ultralytics-main/        YOLO 源码
 ```
 
-`runs/`、`data/`、`exports/` 和模型权重均不提交 Git。所有实验分析文字写在
-`experiment_records/` 的对应 Run 记录中；`云服务器实验设计与记录表.md` 只保存
-实验计划、参数、状态和结果表格。
+`runs/`、`data/`、`exports/` 和模型权重均不提交 Git。参数优化分析写入
+`experiment_records/parameter_tuning/` 并回填总表表 2；参数冻结后、可用于期刊对比
+的正式实验才写入 `experiment_records/runs/` 和 `comparison.csv`。
 
 ## 一、本地开发
 
@@ -42,7 +45,7 @@
 3. 在本地提交并推送到 GitHub。
 4. 云端只拉取这个已提交版本。
 
-当前默认配置：
+当前参数优化配置：
 
 - 训练参数：`experiments/yolo26m_seg_5090.yaml`
 - 云端数据：`experiments/yolo_data_v2_cloud.yaml`
@@ -70,37 +73,37 @@
 ```bash
 git clone --branch cloud/data-v2-5090 https://github.com/xiaojiegenga/yolo_plus.git yolo_plus
 cd yolo_plus
-python scripts/cloud_train_data_v2.py --preflight10 --run-name data-v2-5090-preflight
 ```
 
 已有仓库时只需更新：
 
 ```bash
 git pull --ff-only
-python scripts/cloud_train_data_v2.py --preflight10 --run-name data-v2-5090-preflight
+RUN_ID="replace-with-new-unique-run-id"
+python scripts/cloud_train_data_v2.py --run-name "${RUN_ID}"
 ```
 
-短预检确认无误后，由用户决定是否启动正式训练：
-
-```bash
-python scripts/cloud_train_data_v2.py --run-name data-v2-5090-baseline
-```
+RTX 5090 已确定。当前处于表 1 参数优化阶段，每次训练前必须先在本地修改配置、
+设置新的 Run ID、提交并推送，再让云端拉取。`yolo26m_seg_5090.yaml` 当前不是最终冻结配置。
 
 入口会保留镜像自带的 PyTorch，并在缺少其他依赖时安装仓库内
 `ultralytics-main`。首次使用官方 `yolo26m-seg.pt` 时可能需要联网下载权重。
 
-## 三、云端打包并传回本地
+## 三、训练 Run 打包并传回本地
 
-训练完成后在云端执行：
+训练完成后，使用本次唯一 Run ID 在云端执行：
 
 ```bash
-python scripts/transfer_run.py pack --run-id data-v2-5090-baseline
+RUN_ID="replace-with-current-run-id"
+python scripts/transfer_run.py pack --run-id "${RUN_ID}"
 ```
 
-得到 `exports/data-v2-5090-baseline.zip`。在本地电脑下载：
+得到对应的 `exports/<run-id>.zip`。在本地电脑下载：
 
 ```powershell
-scp <ssh-host>:~/yolo_plus/exports/data-v2-5090-baseline.zip .\exports\
+$sshHost = 'replace-with-ssh-host'
+$runId = 'replace-with-current-run-id'
+scp "${sshHost}:~/yolo_plus/exports/${runId}.zip" .\exports\
 ```
 
 `<ssh-host>` 可使用本机 `~/.ssh/config` 中配置的主机别名。
@@ -108,16 +111,24 @@ scp <ssh-host>:~/yolo_plus/exports/data-v2-5090-baseline.zip .\exports\
 ## 四、本地解包、分析和保存
 
 ```powershell
-python scripts/transfer_run.py unpack --archive exports/data-v2-5090-baseline.zip
-python scripts/fill_results_table.py --run-dir runs/data-v2-5090-baseline --run-id data-v2-5090-baseline
+$runId = 'replace-with-current-run-id'
+python scripts/transfer_run.py unpack --archive "exports/${runId}.zip"
 ```
 
-然后：
+参数优化 Run 解包后：
 
-1. 从 `experiment_records/runs/_template.md` 创建对应 Run 记录。
-2. 根据 `args.yaml`、`results.csv` 和验证输出填写参数与指标。
-3. 在 Run 记录中写实验分析，只把参数、状态和指标回填到总表。
-4. 只提交配置、代码、记录和表格；完整 `runs/` 与传输 ZIP 留在本地或外部存储。
+1. 在 `experiment_records/parameter_tuning/<run-id>.md` 分析参数与结果。
+2. 把结果填入 `云服务器实验设计与记录表.md` 表 2。
+3. 不运行 `fill_results_table.py`，不修改 `comparison.csv`。
+
+参数冻结后、可用于期刊对比的正式 Run，才从 `experiment_records/runs/_template.md`
+创建记录并运行：
+
+```powershell
+python scripts/fill_results_table.py --run-dir "runs/${runId}" --run-id "$runId" --data data-v2
+```
+
+只提交配置、代码、轻量记录和表格；完整 `runs/` 与传输 ZIP 留在本地或外部存储。
 
 ## 当前数据口径
 
