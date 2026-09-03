@@ -12,3 +12,7 @@
 
 训练成功后，`train_yolo26_seg.py` 会根据实际 Run ID 打印云端打包、本地 SCP 下载和
 本地解包命令。SCP 命令中的 `SCP_PORT` 需要替换为当次实例页面显示的 SSH 端口。
+
+自定义模型结构可在实验配置顶层写 `pretrained: yolo26m-seg.pt`。训练入口会先按
+`model` YAML 构建结构，再调用 `model.load(pretrained)` 迁移官方权重；命令行
+`--pretrained` 仍可覆盖配置值。

@@ -8,8 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 这是什么项目
 
-无人机航拍水稻害虫实例分割实验仓库（继续使用 `xiaojiegenga/yolo_plus`，当前分支
-`cloud/data-v2-5090`）。数据集 `rice-pest-data-v2`，2 类（`Rice leaffolder`、
+无人机航拍水稻害虫实例分割实验仓库（继续使用 `xiaojiegenga/yolo_plus`，正式 Baseline
+分支为 `cloud/data-v2-5090`，当前改进 A 分支为 `feature/data-v2-abl-a-attention`）。
+数据集 `rice-pest-data-v2`，2 类（`Rice leaffolder`、
 `Rice stemborers`），主选择指标为 **Val Mask mAP50-95**。
 
 开始任何工作前，先按顺序阅读（`PROGRESS.md` 是快速了解当前进展的入口，其余是规则与背景）：
@@ -35,7 +36,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 常用命令
 
-所有命令在仓库根目录执行。没有测试套件或 lint 配置。
+所有命令在仓库根目录执行。改进 A 有聚焦结构测试，项目没有额外的全局 lint 配置。
 
 ```bash
 RUN_ID="replace-with-run-id"
@@ -72,6 +73,7 @@ python scripts/fill_results_table.py --run-dir "runs/${RUN_ID}" --run-id "${RUN_
 |---|---|
 | `experiment` | 默认 Run 名称前缀 |
 | `model` | 传给 `YOLO(...)`（本地路径或官方模型名，如 `yolo26m-seg.pt`） |
+| `pretrained` | 可选；自定义 YAML 建模后传给 `model.load(...)` 的官方模型名或本地权重 |
 | `data` | 解析为数据 YAML，再传给 `model.train(data=...)` |
 | `train` | 其余键原样传给 `model.train(**runtime)` |
 
@@ -79,8 +81,9 @@ python scripts/fill_results_table.py --run-dir "runs/${RUN_ID}" --run-id "${RUN_
 
 - **数据 YAML**（如 `experiments/yolo_data_v2_cloud.yaml`）：`path`/`train`/`val`/
   `test`/`nc`/`names`，`nc` 必须为 2，由 `validate_data_yaml()` 校验。
-- **训练配置 YAML**（如 `experiments/yolo26m_seg_5090.yaml`）：顶层 `experiment`/
-  `model`/`data`/`train`。旧的完整配置（如 `yolo26m_seg_baseline_train.yaml`）里的
+- **训练配置 YAML**（如 `experiments/data-v2-abl-100-srcbam-b16-s42.yaml`）：顶层
+  `experiment`/`model`/可选 `pretrained`/`data`/`train`。旧的完整配置（如
+  `yolo26m_seg_baseline_train.yaml`）里的
   `profile_id`、`*_sha256` 等字段不会被当前入口读取或校验，仅作历史参照。
 
 `train_yolo26_seg.py` 还会强制写入 `runtime["data"]`、`project`、`name`、`exist_ok=False`，

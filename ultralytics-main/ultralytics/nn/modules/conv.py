@@ -23,6 +23,7 @@ __all__ = (
     "Index",
     "LightConv",
     "RepConv",
+    "ResidualCBAM",
     "SpatialAttention",
 )
 
@@ -611,6 +612,47 @@ class CBAM(nn.Module):
             (torch.Tensor): Attended output tensor.
         """
         return self.spatial_attention(self.channel_attention(x))
+
+
+class ResidualCBAM(nn.Module):
+    """Apply canonical CBAM attention through a learnable residual mixing gate.
+
+    Channel attention uses shared avg/max-pooled descriptors and a bottleneck MLP.
+    Spatial attention then uses channel-wise avg/max statistics. The final output
+    softly interpolates between the original and attended features.
+    """
+
+    def __init__(self, channels: int, reduction: int = 16, kernel_size: int = 7, init_mix: float = 0.1):
+        """Initialize residual CBAM while preserving input and output channels."""
+        super().__init__()
+        if reduction < 1:
+            raise ValueError(f"reduction must be at least 1, got {reduction}")
+        if kernel_size not in {3, 7}:
+            raise ValueError(f"kernel_size must be 3 or 7, got {kernel_size}")
+        if not 0.0 < init_mix < 1.0:
+            raise ValueError(f"init_mix must be in (0, 1), got {init_mix}")
+
+        hidden = max(channels // reduction, 1)
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.channel_mlp = nn.Sequential(
+            nn.Conv2d(channels, hidden, 1, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(hidden, channels, 1, bias=False),
+        )
+        self.spatial_conv = nn.Conv2d(2, 1, kernel_size, padding=kernel_size // 2, bias=False)
+        self.mix_logit = nn.Parameter(torch.tensor(math.log(init_mix / (1.0 - init_mix)), dtype=torch.float32))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Refine features while retaining a learnable fraction of the identity path."""
+        max_pooled = torch.amax(x, dim=(2, 3), keepdim=True)
+        channel_map = torch.sigmoid(self.channel_mlp(self.avg_pool(x)) + self.channel_mlp(max_pooled))
+        attended = x * channel_map
+        spatial_stats = torch.cat(
+            [torch.mean(attended, dim=1, keepdim=True), torch.amax(attended, dim=1, keepdim=True)], dim=1
+        )
+        attended = attended * torch.sigmoid(self.spatial_conv(spatial_stats))
+        mix = torch.sigmoid(self.mix_logit).to(dtype=x.dtype)
+        return x + mix * (attended - x)
 
 
 class Concat(nn.Module):

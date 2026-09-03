@@ -1,7 +1,8 @@
 # YOLO 水稻害虫实例分割实验
 
 本项目继续使用 [xiaojiegenga/yolo_plus](https://github.com/xiaojiegenga/yolo_plus)，
-当前开发分支为 `cloud/data-v2-5090`。
+正式 Baseline 分支为 `cloud/data-v2-5090`；当前改进 A 开发分支为
+`feature/data-v2-abl-a-attention`。
 
 ## 工作模式
 
@@ -45,9 +46,10 @@
 3. 在本地提交并推送到 GitHub。
 4. 云端只拉取这个已提交版本。
 
-当前参数优化配置：
+当前正式消融配置：
 
-- 训练参数：`experiments/yolo26m_seg_5090.yaml`
+- `000 Baseline`：`experiments/data-v2-abl-000-y26m-b16-s42.yaml`（已完成）
+- `100 SR-CBAM`：`experiments/data-v2-abl-100-srcbam-b16-s42.yaml`（待云端预检）
 - 云端数据：`experiments/yolo_data_v2_cloud.yaml`
 - 默认数据根目录：`/root/yolo_data`
 
@@ -71,20 +73,21 @@
 首次使用：
 
 ```bash
-git clone --branch cloud/data-v2-5090 https://github.com/xiaojiegenga/yolo_plus.git yolo_plus
+git clone --branch feature/data-v2-abl-a-attention https://github.com/xiaojiegenga/yolo_plus.git yolo_plus
 cd yolo_plus
 ```
 
-已有仓库时只需更新：
+已有仓库切换到当前改进 A 分支：
 
 ```bash
+git fetch origin
+git switch --track origin/feature/data-v2-abl-a-attention
 git pull --ff-only
-RUN_ID="replace-with-new-unique-run-id"
-python scripts/cloud_train_data_v2.py --run-name "${RUN_ID}"
 ```
 
-RTX 5090 已确定。当前处于表 1 参数优化阶段，每次训练前必须先在本地修改配置、
-设置新的 Run ID、提交并推送，再让云端拉取。`yolo26m_seg_5090.yaml` 当前不是最终冻结配置。
+RTX 5090 和表 1 训练参数均已冻结。当前改进 A 只改变 Backbone P3/P4 的 SR-CBAM；
+正式 Run ID 为 `data-v2-abl-100-srcbam-b16-s42`。云端运行命令见
+`knowledge/改进A-SR-CBAM注意力机制原理与实现.md`。
 
 入口会保留镜像自带的 PyTorch，并在缺少其他依赖时安装仓库内
 `ultralytics-main`。首次使用官方 `yolo26m-seg.pt` 时可能需要联网下载权重。

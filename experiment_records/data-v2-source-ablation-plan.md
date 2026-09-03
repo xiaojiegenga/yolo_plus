@@ -1,6 +1,6 @@
 # data-v2 源码改进消融实验主计划
 
-> 状态：阶段 0 正式 Baseline 已完成并核验，当前进入阶段 1 的 B：Dice 定义冻结
+> 状态：阶段 0 正式 Baseline 已完成并核验；改进 A 已冻结、实现并推送，待云端预检
 > 当前核心任务：YOLO26m-seg 源码改进消融实验
 > 数据集：`rice-pest-data-v2`
 > 硬件：RTX 5090 云服务器
@@ -98,18 +98,21 @@ data-v2 新增卷叶螟中约 55.5% 符合上述小目标口径，中位等效�
 
 | 因素 | 候选改进 | 主要作用位置 | 目标问题 | 当前状态 |
 |---|---|---|---|---|
-| A | 轻量残差式注意力模块（CBAM/SR-CBAM 候选） | Backbone | 复杂背景下的特征选择 | 精确定义待冻结 |
+| A | Selective Residual CBAM（SR-CBAM） | Backbone P3/P4 | 复杂背景下的特征选择 | 已冻结并完成本地实现 |
 | B | BCE + Dice 掩膜损失 | Loss | 掩膜区域重叠与边界质量 | 公式、权重和聚合方式待冻结 |
 | C | P2Head 小目标检测分支 | Neck + Segment Head | 小尺寸卷叶螟检测 | 建议在 data-v2 上重新验证 |
 
-### 4.1 A：注意力模块冻结前必须明确
+### 4.1 A：SR-CBAM 冻结定义
 
-- 使用普通 CBAM 还是残差式轻量 CBAM；
-- 插入 Backbone 的具体层位；
-- Channel Attention reduction ratio；
-- Spatial Attention kernel size；
-- 是否采用近恒等初始化，避免破坏预训练特征；
-- 新增参数量和 GFLOPs。
+- Channel Attention：全局平均池化与最大池化进入共享 `C→C/16→C` MLP；
+- Spatial Attention：通道平均/最大统计拼接后使用 `7×7` 卷积；
+- 残差软融合：`Y = X + α × (CBAM(X) - X)`；
+- `α = sigmoid(mix_logit)`，初值固定为 `0.1`，每个模块独立学习；
+- 只包装 Backbone 第 4、6 层的 `C3k2`，对应 P3/8 与 P4/16；
+- P2、P5、Neck、Segment26、Loss 和 Validator 保持不变；
+- fused Params：23,574,744，较 Baseline 增加 65,734；
+- GFLOPs@640：121.286586，较 Baseline 增加 0.115437；
+- 教学与实现说明：`knowledge/改进A-SR-CBAM注意力机制原理与实现.md`。
 
 ### 4.2 B：Dice 损失冻结前必须明确
 
@@ -174,7 +177,7 @@ P2Head  = 源码中的 P2/4 小目标检测头
 | 编码 | A | B | C | 模型说明 | Run ID | 状态 |
 |---|---:|---:|---:|---|---|---|
 | 000 | × | × | × | 正式 YOLO26m Baseline | `data-v2-abl-000-y26m-b16-s42` | 已完成并核验 |
-| 100 | √ | × | × | A：注意力 | `data-v2-abl-100-attn-b16-s42` | 定义待冻结 |
+| 100 | √ | × | × | A：P3/P4 SR-CBAM | `data-v2-abl-100-srcbam-b16-s42` | 已实现并推送，待云端预检 |
 | 010 | × | √ | × | B：Dice | `data-v2-abl-010-dice-b16-s42` | 定义待冻结 |
 | 001 | × | × | √ | C：P2Head | `data-v2-abl-001-p2head-b16-s42` | 定义待冻结 |
 | 110 | √ | √ | × | A+B | `data-v2-abl-110-attn-dice-b16-s42` | 门控后决定 |
@@ -216,11 +219,11 @@ P2Head  = 源码中的 P2/4 小目标检测头
 推荐运行顺序：
 
 ```text
-000 Baseline → 010 Dice → 100 Attention → 001 P2Head
+000 Baseline → 100 SR-CBAM → 010 Dice → 001 P2Head
 ```
 
-先运行实现风险较低的 Dice，再运行 Backbone 注意力，最后运行结构变化和计算成本更高的
-P2Head。每次结果回传后立即与 `000` 比较，再决定下一项和组合实验。
+用户当前选择先完成 Backbone 注意力 A，再处理 Dice 与 P2Head。每次结果回传后立即与
+`000` 比较，再决定下一项和组合实验。
 
 ### 阶段 3：组合实验
 
@@ -299,7 +302,10 @@ P2Head 的建议保留条件是：卷叶螟 Mask Recall 建议至少提高约 0.
 
 - 旧 P2Head 总体 Mask mAP50 `+0.026`、mAP50-95 `+0.013`，但卷叶螟 Recall `-0.011`；
 - 旧结果说明 P2Head 不是完全无效，但没有证明其解决了小卷叶螟漏检；
-- 旧 CBAM 和 Dice 结果也来自不同数据、参数和源码状态；
+- 旧四阶段普通 CBAM 的 Mask mAP50 相对严格 Baseline 为 `-0.009`，新增约 85.4 万参数；
+- 旧 P3/P4 SR-CBAM 的 Mask mAP50 为 `+0.007`，新增 65,734 参数，但卷叶螟指标没有全面提高；
+- 因此旧结果只支持优先选择 SR-CBAM 作为当前 A 候选，不构成 data-v2 性能结论；
+- 旧 Dice 结果也来自不同数据、参数和源码状态；
 - 所有旧结果不得与当前 data-v2 / RTX 5090 / batch=16 正式结果混入同一严格消融表。
 
 旧项目只用于代码阅读和失败复盘：
@@ -333,7 +339,11 @@ E:\Study\DeepCNN\yolo26\yolo_plus
 - [x] 用户在 RTX 5090 云服务器运行 10 epoch 预检；
 - [x] 用户手动启动并完成正式 Baseline；
 - [x] 回传并分析 `000` 结果；
-- [ ] 依次冻结 B：Dice、A：Attention、C：P2Head 的唯一实现；
+- [x] 冻结 A：SR-CBAM 的唯一公式、P3/P4 插入位置和超参数；
+- [x] 在独立分支完成 A 的源码、模型 YAML、正式配置、权重键兼容检查和教学文档；
+- [x] 提交并推送 A 分支；
+- [ ] 在云端运行 10 epoch 预检；
+- [ ] 后续分别冻结 B：Dice 与 C：P2Head 的唯一实现；
 - [ ] 完成单模块正式消融，再决定组合矩阵；
 - [ ] 最终 `Ours` 冻结后再开展跨模型对比；
 - [ ] Test 保留到最终模型与阈值全部冻结后统一执行。

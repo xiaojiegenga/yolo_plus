@@ -5,9 +5,10 @@
 
 ## 当前状态（一句话）
 
-RTX 5090 与 data-v2 正式训练参数均已冻结。阶段 0 的正式 `000 Baseline` 已完成 300 epoch、
-回传、解包和结果核验，best epoch 216，official fitness 0.81977，Mask mAP50 / mAP50-95 为
-0.71132 / 0.36348。下一步进入阶段 1，先冻结并实现 B：Dice；尚未启动下一次长训。
+RTX 5090 与 data-v2 正式训练参数均已冻结，阶段 0 的正式 `000 Baseline` 已完成并核验。
+改进 A 已冻结为 Backbone P3/P4 的 SR-CBAM，独立分支、源码、模型 YAML、正式配置、测试、
+教学文档和云端实验步骤均已完成并推送。下一步由用户在云端拉取功能分支，执行 dry-run 和
+10 epoch 预检；尚未启动改进 A 的云端训练。
 
 ## 已完成的关键步骤
 
@@ -41,6 +42,17 @@ RTX 5090 与 data-v2 正式训练参数均已冻结。阶段 0 的正式 `000 Ba
 - [x] 正式 `000 Baseline` 已完成全部 300 epoch，未触发 EarlyStopping；Run 与训练日志均已回传本地
 - [x] 正式 Run 已核验并写入 `experiment_records/runs/data-v2-abl-000-y26m-b16-s42.md`、`comparison.csv` 与实验总表
 - [x] 正式 `000` 与冻结 P2 除时间外的全部 300 轮数值完全一致，确认 seed=42 确定性复现
+- [x] 将正式 Baseline 结果和轻量记录单独提交到 `cloud/data-v2-5090`：commit `c0f4f35`
+- [x] 从 `c0f4f35` 创建独立分支 `feature/data-v2-abl-a-attention`
+- [x] 改进 A 冻结为 P3/P4 Selective Residual CBAM：reduction=16、kernel=7、残差混合初值 0.1
+- [x] 新增 `ResidualCBAM`、`C3k2SRCBAM` 及模型解析注册，保持 Backbone/Head 层号不变
+- [x] 新建模型 YAML 与正式配置 `experiments/data-v2-abl-100-srcbam-b16-s42.yaml`
+- [x] 训练入口支持配置顶层 `pretrained: yolo26m-seg.pt`，自定义结构可迁移官方权重
+- [x] 本地聚焦测试通过：2 passed；Baseline 全部参数键和形状保留，只新增 8 个注意力状态张量
+- [x] SR-CBAM fused Params 为 23,574,744（+65,734），GFLOPs@640 为 121.286586（+0.115437）
+- [x] 教学文档保存到 `knowledge/改进A-SR-CBAM注意力机制原理与实现.md`
+- [x] `实验步骤.md` 已切换为改进 A 的拉取、预检、正式训练、回传和登记流程
+- [x] Baseline 提交与改进 A 分支已推送到 GitHub
 
 ## 正式消融 Baseline 结果
 
@@ -91,18 +103,18 @@ Run ID：`data-v2-tune-mr2-nomix-e300-b16-s42`，相对当前最优 P1 `data-v2-
 
 ## 下一步
 
-1. 冻结 B：Dice 的唯一公式、λ、smooth/epsilon、sigmoid 位置和聚合方式，并登记到总表表 16。
-2. 实现 Dice 源码改动和唯一配置 `data-v2-abl-010-dice-b16-s42`，完成必要的单元/前向检查。
-3. 将源码、配置和轻量记录提交并推送到 `cloud/data-v2-5090`。
-4. 云端拉取新 commit 后先做 10 epoch 预检；正式 300 epoch 长训仍由用户确认后手动启动。
-5. B 的正式结果核验后再按计划冻结 A：Attention、C：P2Head，并依据单模块结果决定组合矩阵。
+1. 云端按 `实验步骤.md` 拉取 `feature/data-v2-abl-a-attention` 并执行 dry-run。
+2. 用户手动运行独立的 10 epoch 预检，确认权重迁移、两处 SR-CBAM、显存、Val 和保存流程。
+3. 预检通过后，由用户决定并手动启动 `data-v2-abl-100-srcbam-b16-s42` 的 300 epoch 正式训练。
+4. 正式 Run 回传后，与 `000` 比较并决定 A 是否进入组合实验。
+5. A 核验完成后，B：Dice 与 C：P2Head 分别从同一 Baseline 基点建立兄弟分支。
 6. Val 用于模型和方案比较；Test 只在最终方案与推理阈值冻结后统一执行。
 
 ## Git 与本地文件状态
 
-- 当前 Git 根目录：`E:\study\graduate_sec\论文撰写\模型训练`；分支 `cloud/data-v2-5090`，正式 `000` 的训练 commit 为 `1c63ee4`。
-- 本次待提交的轻量内容包括正式 Run 分析、`comparison.csv`、实验总表、消融计划、`PROGRESS.md` 和结果回填脚本口径修正。
-- 云端当前无需启动训练；待 Dice 定义、源码、配置和新 commit 全部冻结后再拉取。
+- 当前 Git 根目录：`E:\study\graduate_sec\论文撰写\模型训练`；正式 Baseline 分支为 `cloud/data-v2-5090`，记录提交为 `c0f4f35`，已推送。
+- 当前工作分支：`feature/data-v2-abl-a-attention`，基点为 `c0f4f35`，已推送并跟踪同名远端分支。
+- 云端下一步是拉取功能分支并按 `实验步骤.md` 执行；助手未启动训练。
 - `runs/` 与 `exports/` 按约定不进入 Git。
 
 ## 关键约束（快速提醒）
