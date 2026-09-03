@@ -36,6 +36,14 @@ METRIC_FIELDS = {
     "mask_map50": "metrics/mAP50(M)",
     "mask_map50_95": "metrics/mAP50-95(M)",
 }
+FITNESS_FIELDS = (
+    "metrics/mAP50-95(B)",
+    "metrics/mAP50-95(M)",
+)
+GENERATED_NOTE_PREFIXES = (
+    "results.csv 中 Mask mAP50-95 最高行为 epoch ",
+    "results.csv 中 official fitness 最高行为 epoch ",
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -86,7 +94,11 @@ def parse_float(value: str, field: str) -> float:
     return number
 
 
-def read_best_mask_row(results_path: Path) -> dict[str, str]:
+def official_fitness(row: dict[str, str]) -> float:
+    return sum(parse_float(row[field], field) for field in FITNESS_FIELDS)
+
+
+def read_best_fitness_row(results_path: Path) -> dict[str, str]:
     with results_path.open("r", encoding="utf-8-sig", newline="") as file:
         reader = csv.DictReader(file)
         rows = [
@@ -101,13 +113,14 @@ def read_best_mask_row(results_path: Path) -> dict[str, str]:
     if not rows:
         raise ValueError(f"results.csv 没有数据行：{results_path}")
 
-    required = ["epoch", *METRIC_FIELDS.values()]
+    required = list(
+        dict.fromkeys(["epoch", *METRIC_FIELDS.values(), *FITNESS_FIELDS])
+    )
     missing = [field for field in required if field not in rows[0]]
     if missing:
         raise ValueError(f"results.csv 缺少字段：{missing}")
 
-    score_field = METRIC_FIELDS["mask_map50_95"]
-    return max(rows, key=lambda row: parse_float(row[score_field], score_field))
+    return max(rows, key=official_fitness)
 
 
 def format_number(value: str, field: str) -> str:
@@ -163,9 +176,18 @@ def build_summary(
     if cli_args.branch:
         summary["git_branch"] = cli_args.branch
 
-    generated_note = f"results.csv 中 Mask mAP50-95 最高行为 epoch {epoch}"
-    old_note = summary.get("notes", "").strip()
-    note_parts = [part for part in [old_note, cli_args.notes.strip(), generated_note] if part]
+    fitness = official_fitness(best_row)
+    generated_note = (
+        f"results.csv 中 official fitness 最高行为 epoch {epoch}（{fitness:.5f}）"
+    )
+    existing_notes = [summary.get("notes", ""), cli_args.notes]
+    note_parts = [
+        part.strip()
+        for note in existing_notes
+        for part in note.split("；")
+        if part.strip() and not part.strip().startswith(GENERATED_NOTE_PREFIXES)
+    ]
+    note_parts.append(generated_note)
     summary["notes"] = "；".join(dict.fromkeys(note_parts))
     return summary
 
@@ -191,7 +213,7 @@ def main() -> None:
     if not results_path.is_file():
         raise FileNotFoundError(f"Run 中没有 results.csv：{results_path}")
 
-    best_row = read_best_mask_row(results_path)
+    best_row = read_best_fitness_row(results_path)
     table_path = resolve_path(cli_args.table, must_exist=False)
     fields, rows = read_table(table_path)
     run_id = cli_args.run_id or run_dir.name
@@ -204,9 +226,10 @@ def main() -> None:
         rows[rows.index(previous)] = summary
 
     print(
-        "| {version} | {status} | {epoch} | {mask_p} | {mask_r} | "
+        "| {version} | {status} | {epoch} | {fitness:.5f} | {mask_p} | {mask_r} | "
         "{mask_map50} | {mask_map50_95} |".format(
             epoch=best_row["epoch"],
+            fitness=official_fitness(best_row),
             **summary,
         )
     )

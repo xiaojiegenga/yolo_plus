@@ -1,13 +1,13 @@
 # 项目进展记录
 
 > 用途：在不同模型 / 会话之间切换时，快速了解项目当前进展。这里只放**已完成的关键步骤**和**运行结果**；固定规则与架构见 `CLAUDE.md` 与 `AGENTS.md`，实验方案细节见 `云服务器实验设计与记录表.md`。
-> 最后更新：2026-09-02
+> 最后更新：2026-09-03
 
 ## 当前状态（一句话）
 
-RTX 5090 与 data-v2 正式训练参数均已冻结，项目核心已切换到源码改进消融实验。阶段 0 的正式
-`000 Baseline` 配置、云端操作步骤和消融主计划已经准备完成；下一步由用户在云服务器手动运行
-10 epoch 预检，再决定是否启动 300 epoch 正式 Baseline。当前未启动任何阶段 0 训练。
+RTX 5090 与 data-v2 正式训练参数均已冻结。阶段 0 的正式 `000 Baseline` 已完成 300 epoch、
+回传、解包和结果核验，best epoch 216，official fitness 0.81977，Mask mAP50 / mAP50-95 为
+0.71132 / 0.36348。下一步进入阶段 1，先冻结并实现 B：Dice；尚未启动下一次长训。
 
 ## 已完成的关键步骤
 
@@ -38,6 +38,19 @@ RTX 5090 与 data-v2 正式训练参数均已冻结，项目核心已切换到�
 - [x] 新建正式阶段 0 配置 `experiments/data-v2-abl-000-y26m-b16-s42.yaml`，显式锁定全部训练参数
 - [x] 将 `实验步骤.md` 切换为阶段 0：dry-run → 10 epoch 预检 → 用户手动正式训练 → 打包回传 → 正式登记
 - [x] 阶段 0 准备文件已纳入 `cloud/data-v2-5090` 的 Git 提交与推送流程；云端只需拉取后按步骤执行
+- [x] 正式 `000 Baseline` 已完成全部 300 epoch，未触发 EarlyStopping；Run 与训练日志均已回传本地
+- [x] 正式 Run 已核验并写入 `experiment_records/runs/data-v2-abl-000-y26m-b16-s42.md`、`comparison.csv` 与实验总表
+- [x] 正式 `000` 与冻结 P2 除时间外的全部 300 轮数值完全一致，确认 seed=42 确定性复现
+
+## 正式消融 Baseline 结果
+
+| Run ID | Best epoch | Official fitness | Mask P | Mask R | Mask mAP50 | Mask mAP50-95 | GPU_mem 峰值 | 时间 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `data-v2-abl-000-y26m-b16-s42` | 216 | 0.81977 | 0.64822 | 0.67252 | 0.71132 | 0.36348 | 15.6 GB | 1.227 h |
+
+- 训练结束 `best.pt` 复核的分类别 Mask P/R/mAP50/mAP50-95：Rice leaffolder 为 0.630 / 0.656 / 0.677 / 0.266，Rice stemborers 为 0.671 / 0.687 / 0.745 / 0.461。
+- 训练完成全部 300 epoch；epoch 300 指标低于 epoch 216，正式比较使用 `best.pt`。
+- 两个训练图像各有 1 个重复标签被加载器移除；train / Val 均为 0 corrupt，后续消融保持相同数据处理口径。
 
 ## 已有参数优化结果
 
@@ -78,20 +91,18 @@ Run ID：`data-v2-tune-mr2-nomix-e300-b16-s42`，相对当前最优 P1 `data-v2-
 
 ## 下一步
 
-1. 云服务器切换到 `cloud/data-v2-5090` 并拉取阶段 0 提交。
-2. 用户按 `实验步骤.md` 先执行 dry-run，再手动运行独立的 10 epoch 预检；不运行 1 epoch。
-3. 预检通过后，由用户手动启动 `data-v2-abl-000-y26m-b16-s42` 的 300 epoch 正式训练。
-4. 正式 Run 回传后建立 `experiment_records/runs/data-v2-abl-000-y26m-b16-s42.md`，并更新 `comparison.csv`。
-5. 只有 `000` 正式结果核验完成后，才依次冻结 Dice、Attention、P2Head 的唯一源码实现。
-6. Val 用于模型和方案比较；Test 仍只在最终方案与推理阈值冻结后统一执行。
+1. 冻结 B：Dice 的唯一公式、λ、smooth/epsilon、sigmoid 位置和聚合方式，并登记到总表表 16。
+2. 实现 Dice 源码改动和唯一配置 `data-v2-abl-010-dice-b16-s42`，完成必要的单元/前向检查。
+3. 将源码、配置和轻量记录提交并推送到 `cloud/data-v2-5090`。
+4. 云端拉取新 commit 后先做 10 epoch 预检；正式 300 epoch 长训仍由用户确认后手动启动。
+5. B 的正式结果核验后再按计划冻结 A：Attention、C：P2Head，并依据单模块结果决定组合矩阵。
+6. Val 用于模型和方案比较；Test 只在最终方案与推理阈值冻结后统一执行。
 
 ## Git 与本地文件状态
 
-- 当前工作分支：`cloud/data-v2-5090`。真实 Git 工作区位于 `E:\Study\论文撰写\yolo_plus_git`；
-  夸克同步目录 `模型训练` 不含 `.git/`，只用于编辑与跨电脑同步。
-- 本次阶段 0 Git 内容：正式 `000` YAML、消融主计划、P2 冻结记录、更新后的 `PROGRESS.md`、
-  `实验步骤.md`、实验目录说明及当前正式训练参数表。
-- 云端下一步：拉取该分支并由用户手动执行阶段 0 命令；助手没有启动训练。
+- 当前 Git 根目录：`E:\study\graduate_sec\论文撰写\模型训练`；分支 `cloud/data-v2-5090`，正式 `000` 的训练 commit 为 `1c63ee4`。
+- 本次待提交的轻量内容包括正式 Run 分析、`comparison.csv`、实验总表、消融计划、`PROGRESS.md` 和结果回填脚本口径修正。
+- 云端当前无需启动训练；待 Dice 定义、源码、配置和新 commit 全部冻结后再拉取。
 - `runs/` 与 `exports/` 按约定不进入 Git。
 
 ## 关键约束（快速提醒）

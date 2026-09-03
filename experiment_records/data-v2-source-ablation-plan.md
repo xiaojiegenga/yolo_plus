@@ -1,10 +1,10 @@
 # data-v2 源码改进消融实验主计划
 
-> 状态：阶段 0 配置准备完成，待云端 10 epoch 预检与正式训练
+> 状态：阶段 0 正式 Baseline 已完成并核验，当前进入阶段 1 的 B：Dice 定义冻结
 > 当前核心任务：YOLO26m-seg 源码改进消融实验
 > 数据集：`rice-pest-data-v2`
 > 硬件：RTX 5090 云服务器
-> 更新日期：2026-09-02
+> 更新日期：2026-09-03
 
 ## 1. 基线冻结决定
 
@@ -44,7 +44,8 @@ data-v2-tune-mr2-nomix-e300-b16-s42
 | 源码改进 | 无 |
 | CBAM / Dice / P2Head | 全部不包含 |
 | 用途 | 消融 000、YOLO26m 正式 Baseline、跨模型对比中的 YOLO26m 行 |
-| 训练状态 | 配置已建，待用户运行 |
+| 训练状态 | 已完成并核验；best epoch 216，official fitness 0.81977 |
+| 正式记录 | `experiment_records/runs/data-v2-abl-000-y26m-b16-s42.md` |
 
 ## 2. 实验目标
 
@@ -172,7 +173,7 @@ P2Head  = 源码中的 P2/4 小目标检测头
 
 | 编码 | A | B | C | 模型说明 | Run ID | 状态 |
 |---|---:|---:|---:|---|---|---|
-| 000 | × | × | × | 正式 YOLO26m Baseline | `data-v2-abl-000-y26m-b16-s42` | 配置已建/待运行 |
+| 000 | × | × | × | 正式 YOLO26m Baseline | `data-v2-abl-000-y26m-b16-s42` | 已完成并核验 |
 | 100 | √ | × | × | A：注意力 | `data-v2-abl-100-attn-b16-s42` | 定义待冻结 |
 | 010 | × | √ | × | B：Dice | `data-v2-abl-010-dice-b16-s42` | 定义待冻结 |
 | 001 | × | × | √ | C：P2Head | `data-v2-abl-001-p2head-b16-s42` | 定义待冻结 |
@@ -329,9 +330,9 @@ E:\Study\DeepCNN\yolo26\yolo_plus
 - [x] 创建正式 `000 Baseline` YAML，内容复制冻结配方，只更换正式 Run ID；
 - [x] 确认统一训练入口可通过 `--config` 显式读取正式消融配置，无需改写历史默认配置；
 - [x] 将 Baseline 配置、消融计划与阶段 0 操作步骤提交并推送到 `cloud/data-v2-5090`；
-- [ ] 用户在 RTX 5090 云服务器运行 10 epoch 预检；
-- [ ] 用户手动启动正式 Baseline；
-- [ ] 回传并分析 `000` 结果；
+- [x] 用户在 RTX 5090 云服务器运行 10 epoch 预检；
+- [x] 用户手动启动并完成正式 Baseline；
+- [x] 回传并分析 `000` 结果；
 - [ ] 依次冻结 B：Dice、A：Attention、C：P2Head 的唯一实现；
 - [ ] 完成单模块正式消融，再决定组合矩阵；
 - [ ] 最终 `Ours` 冻结后再开展跨模型对比；
