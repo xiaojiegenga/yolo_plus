@@ -1,6 +1,6 @@
 # data-v2 源码改进消融实验主计划
 
-> 状态：正式 Baseline 与改进 A 均已完成并核验；当前 P3/P4 SR-CBAM 未通过门控
+> 状态：正式 Baseline 与改进 A1 均已完成并核验；A2 已实现，待云端训练
 > 当前核心任务：YOLO26m-seg 源码改进消融实验
 > 数据集：`rice-pest-data-v2`
 > 硬件：RTX 5090 云服务器
@@ -98,11 +98,11 @@ data-v2 新增卷叶螟中约 55.5% 符合上述小目标口径，中位等效�
 
 | 因素 | 候选改进 | 主要作用位置 | 目标问题 | 当前状态 |
 |---|---|---|---|---|
-| A | Selective Residual CBAM（SR-CBAM） | Backbone P3/P4 | 复杂背景下的特征选择 | 正式训练已完成；未通过门控，不进入组合 |
+| A | A1：P3/P4 SR-CBAM；A2：P3 ZR-CBAM | Backbone | 复杂背景下的特征选择 | A1 未通过门控；A2 待云端训练 |
 | B | BCE + Dice 掩膜损失 | Loss | 掩膜区域重叠与边界质量 | 公式、权重和聚合方式待冻结 |
 | C | P2Head 小目标检测分支 | Neck + Segment Head | 小尺寸卷叶螟检测 | 建议在 data-v2 上重新验证 |
 
-### 4.1 A：SR-CBAM 冻结定义
+### 4.1 A1：SR-CBAM 已验证定义
 
 - Channel Attention：全局平均池化与最大池化进入共享 `C→C/16→C` MLP；
 - Spatial Attention：通道平均/最大统计拼接后使用 `7×7` 卷积；
@@ -114,7 +114,19 @@ data-v2 新增卷叶螟中约 55.5% 符合上述小目标口径，中位等效�
 - GFLOPs@640：121.286586，较 Baseline 增加 0.115437；
 - 教学与实现说明：`knowledge/改进A-SR-CBAM注意力机制原理与实现.md`。
 
-### 4.2 B：Dice 损失冻结前必须明确
+### 4.2 A2：P3 ZR-CBAM 冻结定义
+
+- Channel Attention 和 Spatial Attention 结构沿用 A1；
+- 只包装 Backbone 第 4 层 `C3k2`，对应 P3/8；P4 恢复为普通 `C3k2`；
+- 加法残差：`Y = X + β × CBAM(X)`；
+- `β` 是不经过 sigmoid 的可学习标量，初始值固定为 `0`；
+- 初始输出严格等于 Baseline 特征，训练后 `β` 可以学习正值或负值；
+- P2、P4、P5、Neck、Segment26、Loss、Validator 和训练参数保持不变；
+- 正式 Run ID：`data-v2-abl-a2-p3-zrcbam-b16-s42`；
+- 配置：`experiments/data-v2-abl-a2-p3-zrcbam-b16-s42.yaml`；
+- A2 是 A1 失败后的独立候选，不改写 A1 的负结果。
+
+### 4.3 B：Dice 损失冻结前必须明确
 
 - 最终公式：`Mask Loss = BCE + λ × Dice`；
 - `λ` 的唯一固定值；
@@ -125,7 +137,7 @@ data-v2 新增卷叶螟中约 55.5% 符合上述小目标口径，中位等效�
 
 不得在正式 B 实验完成后根据结果继续调整 `λ`，否则 B 将重新变成参数优化实验。
 
-### 4.3 C：P2Head 冻结原则
+### 4.4 C：P2Head 冻结原则
 
 - 只增加 P2 Neck 路径和 P2 检测/Mask coefficient 分支；
 - 保留标准 P3 Mask Proto，不提高 Proto 原生分辨率；
@@ -177,13 +189,14 @@ P2Head  = 源码中的 P2/4 小目标检测头
 | 编码 | A | B | C | 模型说明 | Run ID | 状态 |
 |---|---:|---:|---:|---|---|---|
 | 000 | × | × | × | 正式 YOLO26m Baseline | `data-v2-abl-000-y26m-b16-s42` | 已完成并核验 |
-| 100 | √ | × | × | A：P3/P4 SR-CBAM | `data-v2-abl-100-srcbam-b16-s42` | 已完成；Mask mAP50 / mAP50-95 为 0.70884 / 0.35097；淘汰 |
+| 100 | √ | × | × | A1：P3/P4 SR-CBAM | `data-v2-abl-100-srcbam-b16-s42` | 已完成；Mask mAP50 / mAP50-95 为 0.70884 / 0.35097；淘汰 |
+| A2 候选 | √* | × | × | P3 ZR-CBAM，决定是否重新定义 A | `data-v2-abl-a2-p3-zrcbam-b16-s42` | 本地实现和测试完成；待云端训练 |
 | 010 | × | √ | × | B：Dice | `data-v2-abl-010-dice-b16-s42` | 定义待冻结 |
 | 001 | × | × | √ | C：P2Head | `data-v2-abl-001-p2head-b16-s42` | 定义待冻结 |
-| 110 | √ | √ | × | A+B | `data-v2-abl-110-attn-dice-b16-s42` | 当前 A 未通过门控，不运行 |
-| 101 | √ | × | √ | A+C | `data-v2-abl-101-attn-p2head-b16-s42` | 当前 A 未通过门控，不运行 |
+| 110 | √ | √ | × | A+B | `data-v2-abl-110-attn-dice-b16-s42` | 等待 A2、B 门控结果 |
+| 101 | √ | × | √ | A+C | `data-v2-abl-101-attn-p2head-b16-s42` | 等待 A2、C 门控结果 |
 | 011 | × | √ | √ | B+C | `data-v2-abl-011-dice-p2head-b16-s42` | 门控后决定 |
-| 111 | √ | √ | √ | A+B+C | `data-v2-abl-111-combined-b16-s42` | 当前 A 未通过门控，不运行 |
+| 111 | √ | √ | √ | A+B+C | `data-v2-abl-111-combined-b16-s42` | 等待全部单模块门控结果 |
 
 ### 6.2 组合实验门控规则
 
@@ -222,8 +235,8 @@ P2Head  = 源码中的 P2/4 小目标检测头
 000 Baseline → 100 SR-CBAM → 010 Dice → 001 P2Head
 ```
 
-用户当前选择先完成 Backbone 注意力 A，再处理 Dice 与 P2Head。每次结果回传后立即与
-`000` 比较，再决定下一项和组合实验。
+用户当前选择先完成 Backbone 注意力 A。A1 未通过后先训练 A2；A2 回传后立即与 `000`
+和 A1 比较，再决定终止 A 或进入 Dice 与 P2Head。
 
 ### 阶段 3：组合实验
 
@@ -343,7 +356,10 @@ E:\Study\DeepCNN\yolo26\yolo_plus
 - [x] 在独立分支完成 A 的源码、模型 YAML、正式配置、权重键兼容检查和教学文档；
 - [x] 提交并推送 A 分支；
 - [x] 在云端完成预检和 300 epoch 正式训练并回传；
-- [x] 完成 A 与 `000` 的严格配对分析；A 未通过门控，不进入组合；
+- [x] 完成 A1 与 `000` 的严格配对分析；A1 未通过门控，不直接进入组合；
+- [x] 冻结并实现 A2：P3-only Zero-init Residual CBAM，使用独立配置和 Run ID；
+- [x] A2 本地模型解析、初始恒等、权重键兼容和前向测试通过；
+- [ ] 云端完成 A2 预检与正式训练，回传后决定注意力方向；
 - [ ] 后续分别冻结 B：Dice 与 C：P2Head 的唯一实现；
 - [ ] 完成单模块正式消融，再决定组合矩阵；
 - [ ] 最终 `Ours` 冻结后再开展跨模型对比；

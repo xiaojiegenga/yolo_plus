@@ -1,8 +1,8 @@
-# 改进 A：SR-CBAM 注意力机制原理与实现
+# 改进 A：A1 SR-CBAM 与 A2 ZR-CBAM 原理和实现
 
-## 1. 本次选择
+## 1. A1 的初始选择
 
-改进 A 固定为项目自定义的 **Selective Residual CBAM（SR-CBAM，选择性残差轻量
+改进 A1 固定为项目自定义的 **Selective Residual CBAM（SR-CBAM，选择性残差轻量
 CBAM）**。正式消融只测试这一种注意力结构，不把普通 CBAM 与 SR-CBAM 串联，也不安排
 两个版本同时进入组合实验。
 
@@ -14,7 +14,7 @@ Mask mAP50 反而下降 0.009；P3/P4 的 SR-CBAM 只增加 65,734 个参数，M
 只有论文要专门证明“残差轻量设计优于普通 CBAM”时，才需要增加普通 CBAM 对照。那时应
 建立两个独立 Run，并固定相同插入位置、通道降维率和空间卷积核，使唯一差别只有残差混合。
 
-## 2. 插入 Backbone 的准确位置
+## 2. A1 插入 Backbone 的准确位置
 
 输入尺寸为 640 时，YOLO26m Backbone 的主要特征层如下：
 
@@ -207,7 +207,7 @@ A、B、C 在组合前应是从同一正式 Baseline 基点派生的兄弟分支
 data-v2-abl-100-srcbam-b16-s42
 ```
 
-## 9. 本地验证与云端运行
+## 9. A1 本地验证与云端运行
 
 ### 9.1 本地只检查，不训练
 
@@ -277,6 +277,54 @@ tail -f train_data-v2-abl-100-srcbam-b16-s42.log
 如果总体与目标类别指标都下降，就把 A 记录为负结果并停止组合；如果总体接近持平但卷叶螟
 专项指标有清晰改善，可以保留为组合候选。不能在看到正式结果后再修改 `reduction`、核大小、
 插入位置或混合初值并仍称为同一个正式 A。
+
+## 11. A1 正式结果与 A2 迭代
+
+A1 的 data-v2 正式训练已经完成：
+
+| 指标 | 000 Baseline | A1 P3/P4 SR-CBAM | 变化 |
+|---|---:|---:|---:|
+| Official fitness | 0.81977 | 0.80644 | -0.01333 |
+| Mask mAP50 | 0.71132 | 0.70884 | -0.00248 |
+| Mask mAP50-95 | 0.36348 | 0.35097 | -0.01251 |
+
+A1 没有通过门控。其 `best.pt` 中 P3/P4 的 `alpha` 分别为 0.16722 和 0.09860：P3 的
+混合强度发生了变化，P4 几乎停留在初值，但总体严格掩膜 AP 仍然下降。因此 A2 只保留
+更有学习迹象、分辨率也更高的 P3 注意力，并改变残差形式。
+
+A1 的软插值为：
+
+```text
+Y = X + alpha × (CBAM(X) - X)
+```
+
+因为 CBAM 输出已经经过两次 0～1 权重相乘，该公式只能在原特征 `X` 与被抑制后的特征之间
+插值。A2 改为零初始化的加法残差：
+
+```text
+X_att = CBAM(X)
+Y = X + beta × X_att
+beta 初始值 = 0
+```
+
+`beta=0` 时，A2 的输出严格等于 `X`，因此刚开始训练时不会改变已经迁移的 Baseline 特征。
+`beta` 不经过 sigmoid，训练后既能取正值以增强注意力特征，也能取负值进行反向修正。
+这借鉴的是零初始化残差分支的优化思想，并不意味着 A2 尚未训练就必然优于 A1。
+
+A2 只改变以下内容：
+
+| 文件 | A2 改动 |
+|---|---|
+| `ultralytics-main/ultralytics/nn/modules/conv.py` | 新增 `ZeroInitResidualCBAM` |
+| `ultralytics-main/ultralytics/nn/modules/block.py` | 新增包装器 `C3k2ZRCBAM` |
+| `ultralytics-main/ultralytics/nn/tasks.py` | 注册新模块供模型 YAML 解析 |
+| `ultralytics-main/ultralytics/cfg/models/26/yolo26m-p3-zrcbam-seg.yaml` | 仅在 Backbone 第 4 层 P3/8 使用 A2 |
+| `experiments/data-v2-abl-a2-p3-zrcbam-b16-s42.yaml` | 新的正式 Run ID，训练参数继承 `000` |
+
+A2 的 fused Params 为 23,541,877，较 Baseline 增加 32,867；GFLOPs@640 为
+121.231795，增加 0.060646。A2 使用新的 Run ID
+`data-v2-abl-a2-p3-zrcbam-b16-s42`，不会改写 A1 的实验身份或负结果。具体云端命令以
+根目录 `实验步骤.md` 为准。
 
 ## 参考资料
 

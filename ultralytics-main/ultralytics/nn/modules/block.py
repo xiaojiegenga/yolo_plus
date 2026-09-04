@@ -9,7 +9,16 @@ import torch.nn.functional as F
 
 from ultralytics.utils.torch_utils import fuse_conv_and_bn
 
-from .conv import Conv, DWConv, GhostConv, LightConv, RepConv, ResidualCBAM, autopad
+from .conv import (
+    Conv,
+    DWConv,
+    GhostConv,
+    LightConv,
+    RepConv,
+    ResidualCBAM,
+    ZeroInitResidualCBAM,
+    autopad,
+)
 from .transformer import TransformerBlock
 
 __all__ = (
@@ -38,6 +47,7 @@ __all__ = (
     "C3Ghost",
     "C3k2",
     "C3k2SRCBAM",
+    "C3k2ZRCBAM",
     "C3x",
     "CBFuse",
     "CBLinear",
@@ -1136,6 +1146,33 @@ class C3k2SRCBAM(C3k2):
     def forward_split(self, x: torch.Tensor) -> torch.Tensor:
         """Apply SR-CBAM after the split-based C3k2 forward path."""
         return self.srcbam(super().forward_split(x))
+
+
+class C3k2ZRCBAM(C3k2):
+    """Run a C3k2 stage followed by zero-initialized additive residual CBAM."""
+
+    def __init__(
+        self,
+        c1: int,
+        c2: int,
+        n: int = 1,
+        c3k: bool = False,
+        e: float = 0.5,
+        attn: bool = False,
+        g: int = 1,
+        shortcut: bool = True,
+    ):
+        """Initialize the baseline C3k2 path and A2 residual attention."""
+        super().__init__(c1, c2, n, c3k, e, attn, g, shortcut)
+        self.zrcbam = ZeroInitResidualCBAM(c2, reduction=16, kernel_size=7)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply A2 residual CBAM after the standard C3k2 forward path."""
+        return self.zrcbam(super().forward(x))
+
+    def forward_split(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply A2 residual CBAM after the split-based C3k2 forward path."""
+        return self.zrcbam(super().forward_split(x))
 
 
 class C3k(C3):

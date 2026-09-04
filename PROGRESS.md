@@ -1,13 +1,14 @@
 # 项目进展记录
 
 > 用途：在不同模型 / 会话之间切换时，快速了解项目当前进展。这里只放**已完成的关键步骤**和**运行结果**；固定规则与架构见 `CLAUDE.md` 与 `AGENTS.md`，实验方案细节见 `云服务器实验设计与记录表.md`。
-> 最后更新：2026-09-03
+> 最后更新：2026-09-04
 
 ## 当前状态（一句话）
 
-RTX 5090 与 data-v2 正式训练参数均已冻结，正式 `000 Baseline` 和改进 A：P3/P4
-SR-CBAM 均已完成并核验。A 的 Mask mAP50 / mAP50-95 相对 `000` 为 -0.00248 / -0.01251，
-未通过单模块门控，不进入组合实验。下一步从正式 Baseline 基点独立冻结并实现改进 B：Dice。
+RTX 5090 与 data-v2 正式训练参数均已冻结。改进 A1：P3/P4 SR-CBAM 已完成，但其
+Mask mAP50 / mAP50-95 相对 `000` 为 -0.00248 / -0.01251。A2 已改为仅在 P3 插入
+零初始化加法残差 CBAM，代码、配置和本地聚焦测试已完成，下一步在云端进行 10 epoch
+预检并由用户手动启动正式训练。
 
 ## 已完成的关键步骤
 
@@ -55,9 +56,13 @@ SR-CBAM 均已完成并核验。A 的 Mask mAP50 / mAP50-95 相对 `000` 为 -0.
 - [x] 改进 A 正式训练完成 300 epoch：best epoch 235，official fitness 0.80644，Mask mAP50 / mAP50-95 为 0.70884 / 0.35097
 - [x] 改进 A 的 `best.pt` 中 α(P3/P4)=0.16722/0.09860；模块参与学习，但没有转化为总体分割收益
 - [x] 改进 A 已写入 `experiment_records/runs/data-v2-abl-100-srcbam-b16-s42.md`、`comparison.csv` 与实验总表
-- [x] 按预设门控淘汰当前 P3/P4 SR-CBAM，不运行包含 A 的组合长训
+- [x] 按预设门控淘汰 A1 的 P3/P4 SR-CBAM，不直接将 A1 放入组合长训
+- [x] A1 实验结果和结论已单独提交：commit `ac11686`
+- [x] A2 冻结为 P3-only Zero-init Residual CBAM：`Y=X+β×CBAM(X)`，`β=0` 初始化
+- [x] 新增 `ZeroInitResidualCBAM`、`C3k2ZRCBAM`、A2 模型 YAML 和正式训练配置
+- [x] A2 聚焦测试通过：4 passed；初始输出严格恒等，只在 Backbone P3 使用新模块
 
-## 正式改进 A 结果
+## 正式改进 A1 结果
 
 | Run ID | Best epoch | Official fitness | Mask P | Mask R | Mask mAP50 | Mask mAP50-95 | GPU_mem 峰值 | 时间 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -116,17 +121,17 @@ Run ID：`data-v2-tune-mr2-nomix-e300-b16-s42`，相对当前最优 P1 `data-v2-
 
 ## 下一步
 
-1. 冻结改进 B 的 `BCE + λ × Dice` 唯一公式、λ、smooth/epsilon、sigmoid 位置和聚合方式。
-2. 切回 `cloud/data-v2-5090` 的正式 Baseline 基点 `c0f4f35`，创建 B 的兄弟分支；不得从 A 分支继续开发。
-3. 完成 B 的源码、配置、聚焦测试、教学文档与 10 epoch 云端预检步骤，再由用户决定是否启动正式长训。
-4. B 完成后按同一门控决定是否保留，再独立处理 C：P2Head。
-5. Val 用于模型和方案比较；Test 只在最终方案与推理阈值冻结后统一执行。
+1. 云端拉取 `feature/data-v2-abl-a-attention` 的最新 A2 提交。
+2. 按 `实验步骤.md` 先执行 dry-run，再运行唯一 Run ID 的 10 epoch 预检。
+3. 预检通过后，由用户手动启动 `data-v2-abl-a2-p3-zrcbam-b16-s42` 的 300 epoch 正式训练。
+4. 回传完整 Run 后，将 A2 与 `000`、A1 严格比较，再决定是否保留改进 A。
+5. A 的方向确定后再独立处理 B：Dice；Val 用于选方案，Test 仍不参与调参。
 
 ## Git 与本地文件状态
 
 - 当前 Git 根目录：`E:\study\graduate_sec\论文撰写\模型训练`；正式 Baseline 分支为 `cloud/data-v2-5090`，记录提交为 `c0f4f35`，已推送。
-- 当前工作分支：`feature/data-v2-abl-a-attention`，基点为 `c0f4f35`；A 源码提交 `9d0c479` 已推送并完成正式验证。
-- 本次 A 分析记录尚未提交；下一开发分支应从 `cloud/data-v2-5090@c0f4f35` 创建。
+- 当前工作分支：`feature/data-v2-abl-a-attention`，基点为 `c0f4f35`；A1 源码提交为 `9d0c479`，结果提交为 `ac11686`。
+- A2 在当前 A 分支继续迭代，使用新的模型 YAML、配置和 Run ID；推送后云端只拉取该分支最新提交。
 - `runs/` 与 `exports/` 按约定不进入 Git。
 
 ## 关键约束（快速提醒）
@@ -137,6 +142,6 @@ Run ID：`data-v2-tune-mr2-nomix-e300-b16-s42`，相对当前最优 P1 `data-v2-
 - 消融实验单变量原则：batch 统一为 16（含尺度对比的 l 模型与源码改动实验），不因 32GB 显存改用 batch=32
 - 参数优化 Run 只写 `parameter_tuning/` 并填总表表 2，不进入 `comparison.csv`
 - 只有参数冻结后、可用于期刊对比的正式 Run 才进入 `comparison.csv`
-- 当前 P3/P4 SR-CBAM 已淘汰；除非重新定义新的 A 并使用新 Run ID，否则不进入组合实验
+- 当前 P3/P4 SR-CBAM（A1）已淘汰；P3 ZR-CBAM（A2）必须用新 Run ID 完成独立验证后再判断
 - 未经用户要求不启动下一轮长时间训练
 - 不覆盖已有 Run / 权重 / 记录；任何参数、代码或数据口径变化换新 Run ID
