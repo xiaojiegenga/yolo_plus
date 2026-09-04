@@ -1,13 +1,13 @@
 # 项目进展记录
 
 > 用途：在不同模型 / 会话之间切换时，快速了解项目当前进展。这里只放**已完成的关键步骤**和**运行结果**；固定规则与架构见 `CLAUDE.md` 与 `AGENTS.md`，实验方案细节见 `云服务器实验设计与记录表.md`。
-> 最后更新：2026-09-03
+> 最后更新：2026-09-04
 
 ## 当前状态（一句话）
 
-RTX 5090 与 data-v2 正式训练参数均已冻结。阶段 0 的正式 `000 Baseline` 已完成 300 epoch、
-回传、解包和结果核验，best epoch 216，official fitness 0.81977，Mask mAP50 / mAP50-95 为
-0.71132 / 0.36348。下一步进入阶段 1，先冻结并实现 B：Dice；尚未启动下一次长训。
+RTX 5090 与 data-v2 正式训练参数均已冻结。A2 在独立注意力分支等待正式结果；改进 B
+已在 `feature/data-v2-abl-b-dice` 冻结为实例掩膜 `BCE + 0.5 × Soft Dice`，源码、配置和
+聚焦测试已完成并提交为 `1d1a71e`。B 分支不包含 A1/A2，A2 结束后可直接切换并预检。
 
 ## 已完成的关键步骤
 
@@ -41,6 +41,13 @@ RTX 5090 与 data-v2 正式训练参数均已冻结。阶段 0 的正式 `000 Ba
 - [x] 正式 `000 Baseline` 已完成全部 300 epoch，未触发 EarlyStopping；Run 与训练日志均已回传本地
 - [x] 正式 Run 已核验并写入 `experiment_records/runs/data-v2-abl-000-y26m-b16-s42.md`、`comparison.csv` 与实验总表
 - [x] 正式 `000` 与冻结 P2 除时间外的全部 300 轮数值完全一致，确认 seed=42 确定性复现
+- [x] A1：P3/P4 SR-CBAM 已在独立分支完成；Mask mAP50 / mAP50-95 相对 `000` 为 -0.00248 / -0.01251
+- [x] A2：P3 ZR-CBAM 已在 `feature/data-v2-abl-a-attention` 完成实现并推送，正式结果待回传
+- [x] 从正式 Baseline `c0f4f35` 创建并推送独立分支 `feature/data-v2-abl-b-dice`
+- [x] B 公式冻结：原实例 BCE + `0.5 × Soft Dice`；框内按实例计算，sigmoid 只用于 Dice，smooth=1.0
+- [x] B 新增可记录配置参数 `instance_dice_gain` 和 `instance_dice_smooth`；默认 gain=0 保持 Baseline
+- [x] 新建正式配置 `experiments/data-v2-abl-010-dice-b16-s42.yaml`
+- [x] B 聚焦测试通过：4 passed；覆盖框内重叠、BCE 等价、有限梯度和配置参数
 
 ## 正式消融 Baseline 结果
 
@@ -91,18 +98,16 @@ Run ID：`data-v2-tune-mr2-nomix-e300-b16-s42`，相对当前最优 P1 `data-v2-
 
 ## 下一步
 
-1. 冻结 B：Dice 的唯一公式、λ、smooth/epsilon、sigmoid 位置和聚合方式，并登记到总表表 16。
-2. 实现 Dice 源码改动和唯一配置 `data-v2-abl-010-dice-b16-s42`，完成必要的单元/前向检查。
-3. 将源码、配置和轻量记录提交并推送到 `cloud/data-v2-5090`。
-4. 云端拉取新 commit 后先做 10 epoch 预检；正式 300 epoch 长训仍由用户确认后手动启动。
-5. B 的正式结果核验后再按计划冻结 A：Attention、C：P2Head，并依据单模块结果决定组合矩阵。
-6. Val 用于模型和方案比较；Test 只在最终方案与推理阈值冻结后统一执行。
+1. A2 正式训练结束后，云端切换到 B 分支并按 `实验步骤.md` 执行 dry-run。
+2. 运行 B 的 10 epoch 预检；通过后由用户手动启动 `data-v2-abl-010-dice-b16-s42`。
+3. 回传 B 完整 Run，与正式 `000` 严格比较后决定是否保留 B。
+4. Val 用于模型和方案比较；Test 只在最终方案与推理阈值冻结后统一执行。
 
 ## Git 与本地文件状态
 
-- 当前 Git 根目录：`E:\study\graduate_sec\论文撰写\模型训练`；分支 `cloud/data-v2-5090`，正式 `000` 的训练 commit 为 `1c63ee4`。
-- 本次待提交的轻量内容包括正式 Run 分析、`comparison.csv`、实验总表、消融计划、`PROGRESS.md` 和结果回填脚本口径修正。
-- 云端当前无需启动训练；待 Dice 定义、源码、配置和新 commit 全部冻结后再拉取。
+- 当前 Git 根目录：`E:\study\graduate_sec\论文撰写\模型训练`；当前分支 `feature/data-v2-abl-b-dice`，基点为正式 Baseline `c0f4f35`。
+- A2 位于 `feature/data-v2-abl-a-attention`；B 分支不包含任何注意力源码。
+- B 损失源码、正式配置和测试提交为 `1d1a71e`；操作教程与进展记录随后的文档提交一并推送。
 - `runs/` 与 `exports/` 按约定不进入 Git。
 
 ## 关键约束（快速提醒）
@@ -113,5 +118,6 @@ Run ID：`data-v2-tune-mr2-nomix-e300-b16-s42`，相对当前最优 P1 `data-v2-
 - 消融实验单变量原则：batch 统一为 16（含尺度对比的 l 模型与源码改动实验），不因 32GB 显存改用 batch=32
 - 参数优化 Run 只写 `parameter_tuning/` 并填总表表 2，不进入 `comparison.csv`
 - 只有参数冻结后、可用于期刊对比的正式 Run 才进入 `comparison.csv`
+- B 只改变实例掩膜损失；模型结构、检测损失、语义辅助损失、数据和训练配方保持 Baseline
 - 未经用户要求不启动下一轮长时间训练
 - 不覆盖已有 Run / 权重 / 记录；任何参数、代码或数据口径变化换新 Run ID

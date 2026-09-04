@@ -1,10 +1,10 @@
 # data-v2 源码改进消融实验主计划
 
-> 状态：阶段 0 正式 Baseline 已完成并核验，当前进入阶段 1 的 B：Dice 定义冻结
+> 状态：正式 Baseline 已完成；A2 待正式结果；B 已实现并等待云端训练
 > 当前核心任务：YOLO26m-seg 源码改进消融实验
 > 数据集：`rice-pest-data-v2`
 > 硬件：RTX 5090 云服务器
-> 更新日期：2026-09-03
+> 更新日期：2026-09-04
 
 ## 1. 基线冻结决定
 
@@ -98,8 +98,8 @@ data-v2 新增卷叶螟中约 55.5% 符合上述小目标口径，中位等效�
 
 | 因素 | 候选改进 | 主要作用位置 | 目标问题 | 当前状态 |
 |---|---|---|---|---|
-| A | 轻量残差式注意力模块（CBAM/SR-CBAM 候选） | Backbone | 复杂背景下的特征选择 | 精确定义待冻结 |
-| B | BCE + Dice 掩膜损失 | Loss | 掩膜区域重叠与边界质量 | 公式、权重和聚合方式待冻结 |
+| A | A1：P3/P4 SR-CBAM；A2：P3 ZR-CBAM | Backbone | 复杂背景下的特征选择 | A1 未通过；A2 正式结果待回传 |
+| B | Instance BCE + Soft Dice | Instance Mask Loss | 掩膜区域重叠与边界质量 | 已实现；待云端预检和正式训练 |
 | C | P2Head 小目标检测分支 | Neck + Segment Head | 小尺寸卷叶螟检测 | 建议在 data-v2 上重新验证 |
 
 ### 4.1 A：注意力模块冻结前必须明确
@@ -111,16 +111,19 @@ data-v2 新增卷叶螟中约 55.5% 符合上述小目标口径，中位等效�
 - 是否采用近恒等初始化，避免破坏预训练特征；
 - 新增参数量和 GFLOPs。
 
-### 4.2 B：Dice 损失冻结前必须明确
+### 4.2 B：Instance Dice 冻结定义
 
-- 最终公式：`Mask Loss = BCE + λ × Dice`；
-- `λ` 的唯一固定值；
-- smooth / epsilon；
-- sigmoid 的位置；
-- 按实例、按 batch 还是按像素聚合；
-- 空前景或零面积实例的数值稳定处理。
+- 最终公式：`L_instance = L_BCE + 0.5 × L_Dice`；
+- `L_BCE` 完整保留正式 Baseline 的 logits BCE、目标框裁剪与面积归一化；
+- `L_Dice = 1 - (2 × Σ(p×g) + 1) / (Σp + Σg + 1)`；
+- `p = sigmoid(mask_logits)`，sigmoid 只用于 Dice；BCE 继续直接接收 logits；
+- Dice 在每个已匹配正样本的目标框内按实例计算；
+- 各实例 BCE 与 Dice 相加后，继续沿用 Baseline 的 `fg_mask.sum()` 归一化和外层 `box` gain；
+- `instance_dice_gain=0.5`、`instance_dice_smooth=1.0` 写入 B 配置和最终 `args.yaml`；
+- 默认 `instance_dice_gain=0`，非 B 配置保持原 BCE 行为；
+- 不改变语义辅助损失、检测损失、模型结构、Validator 或推理流程。
 
-不得在正式 B 实验完成后根据结果继续调整 `λ`，否则 B 将重新变成参数优化实验。
+B 正式结果产生后不得继续调整 gain 或 smooth 并仍沿用同一 Run ID。
 
 ### 4.3 C：P2Head 冻结原则
 
@@ -175,7 +178,7 @@ P2Head  = 源码中的 P2/4 小目标检测头
 |---|---:|---:|---:|---|---|---|
 | 000 | × | × | × | 正式 YOLO26m Baseline | `data-v2-abl-000-y26m-b16-s42` | 已完成并核验 |
 | 100 | √ | × | × | A：注意力 | `data-v2-abl-100-attn-b16-s42` | 定义待冻结 |
-| 010 | × | √ | × | B：Dice | `data-v2-abl-010-dice-b16-s42` | 定义待冻结 |
+| 010 | × | √ | × | B：Instance BCE + Soft Dice | `data-v2-abl-010-dice-b16-s42` | 本地实现与测试完成；待云端训练 |
 | 001 | × | × | √ | C：P2Head | `data-v2-abl-001-p2head-b16-s42` | 定义待冻结 |
 | 110 | √ | √ | × | A+B | `data-v2-abl-110-attn-dice-b16-s42` | 门控后决定 |
 | 101 | √ | × | √ | A+C | `data-v2-abl-101-attn-p2head-b16-s42` | 门控后决定 |
@@ -216,11 +219,11 @@ P2Head  = 源码中的 P2/4 小目标检测头
 推荐运行顺序：
 
 ```text
-000 Baseline → 010 Dice → 100 Attention → 001 P2Head
+000 Baseline → A1/A2 Attention → 010 Instance Dice → 001 P2Head
 ```
 
-先运行实现风险较低的 Dice，再运行 Backbone 注意力，最后运行结构变化和计算成本更高的
-P2Head。每次结果回传后立即与 `000` 比较，再决定下一项和组合实验。
+用户先完成注意力 A2，再直接切换到独立 B 分支训练 Instance Dice，最后处理结构变化和
+计算成本更高的 P2Head。每次结果回传后立即与 `000` 比较，再决定下一项和组合实验。
 
 ### 阶段 3：组合实验
 
@@ -333,7 +336,11 @@ E:\Study\DeepCNN\yolo26\yolo_plus
 - [x] 用户在 RTX 5090 云服务器运行 10 epoch 预检；
 - [x] 用户手动启动并完成正式 Baseline；
 - [x] 回传并分析 `000` 结果；
-- [ ] 依次冻结 B：Dice、A：Attention、C：P2Head 的唯一实现；
+- [x] 在独立分支冻结并实现 B：Instance BCE + 0.5 × Soft Dice；
+- [x] 新建 B 正式配置和聚焦测试，保持模型结构与其他训练参数不变；
+- [ ] A2 完成后在云端切换 B 分支，执行 dry-run、10 epoch 预检和正式训练；
+- [ ] B 回传后与 `000` 做严格配对分析；
+- [ ] 冻结 C：P2Head 的唯一实现；
 - [ ] 完成单模块正式消融，再决定组合矩阵；
 - [ ] 最终 `Ours` 冻结后再开展跨模型对比；
 - [ ] Test 保留到最终模型与阈值全部冻结后统一执行。

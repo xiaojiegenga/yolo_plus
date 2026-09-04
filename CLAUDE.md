@@ -8,9 +8,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 这是什么项目
 
-无人机航拍水稻害虫实例分割实验仓库（继续使用 `xiaojiegenga/yolo_plus`，当前分支
-`cloud/data-v2-5090`）。数据集 `rice-pest-data-v2`，2 类（`Rice leaffolder`、
+无人机航拍水稻害虫实例分割实验仓库（继续使用 `xiaojiegenga/yolo_plus`，当前改进 B
+分支为 `feature/data-v2-abl-b-dice`）。数据集 `rice-pest-data-v2`，2 类（`Rice leaffolder`、
 `Rice stemborers`），主选择指标为 **Val Mask mAP50-95**。
+
+改进 B 已冻结为实例掩膜 `BCE + 0.5 × Soft Dice`，正式 Run ID 为
+`data-v2-abl-010-dice-b16-s42`。本分支不包含 A1/A2 注意力源码。
 
 开始任何工作前，先按顺序阅读（`PROGRESS.md` 是快速了解当前进展的入口，其余是规则与背景）：
 
@@ -35,7 +38,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 常用命令
 
-所有命令在仓库根目录执行。没有测试套件或 lint 配置。
+所有命令在仓库根目录执行。B 有实例 Dice 聚焦测试，项目没有额外的全局 lint 配置。
 
 ```bash
 RUN_ID="replace-with-run-id"
@@ -89,6 +92,10 @@ python scripts/fill_results_table.py --run-dir "runs/${RUN_ID}" --run-id "${RUN_
 `ultralytics-main/` 是 vendored 的 YOLO 源码：入口把该目录插入 `sys.path` 再
 `from ultralytics import YOLO`。改进实验改的是这个目录里的模型源码，不改训练参数。
 
+B 分支在 `ultralytics-main/ultralytics/utils/loss.py` 的原实例 BCE 路径上增加框内
+Soft Dice，并通过 `instance_dice_gain`、`instance_dice_smooth` 配置。默认 gain=0；
+只有 B 配置显式设为 0.5。
+
 ## 两类训练结果记录链条
 
 `fill_results_table.py` 只用于正式训练，是连接原始结果与汇总表的脚本：
@@ -121,7 +128,7 @@ python scripts/fill_results_table.py --run-dir "runs/${RUN_ID}" --run-id "${RUN_
 - 总表表 2 只登记决定表 1 的参数优化训练；10 epoch 预检不进表 2 或 `comparison.csv`。
 - 不覆盖已有 Run、ZIP、权重或历史记录；参数、模型代码或数据口径变化时必须换新 Run ID。
 - Val 用于选方案；Test 只在全部方案冻结后统一评估，不用 Test 调参。
-- RTX 5090 已确定；batch、workers、epochs 等正式参数仍待表 2 参数优化后冻结。
+- RTX 5090 与正式训练参数均已冻结；B 只改变实例掩膜损失。
 - 不提交数据、模型权重、完整 `runs/`、`exports/`、凭据或 SSH 配置。
 - 只处理当前任务相关修改，不重置用户工作。
 

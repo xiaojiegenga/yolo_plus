@@ -13,7 +13,8 @@
 
 ## 固定研究信息
 
-- 仓库：`xiaojiegenga/yolo_plus`，当前开发分支 `cloud/data-v2-5090`。
+- 仓库：`xiaojiegenga/yolo_plus`；正式 Baseline 分支 `cloud/data-v2-5090`；改进 A 分支
+  `feature/data-v2-abl-a-attention`；当前改进 B 分支 `feature/data-v2-abl-b-dice`。
 - 任务：无人机航拍水稻害虫实例分割。
 - 数据集：`rice-pest-data-v2`。
 - 类别：`Rice leaffolder`、`Rice stemborers`。
@@ -87,7 +88,7 @@
 
 - 未经用户明确要求，不启动正式长时间训练。
 - 10 epoch 预检不进入论文精度排名。
-- 当前参数优化配置中的 batch、workers、epochs 等值不代表正式训练参数已经冻结。
+- 正式训练参数已冻结；源码消融只能改变对应模块或损失因素。
 - 不覆盖已有 Run、ZIP、权重或历史记录；重跑使用新 Run ID。
 - 不使用 Test 调参。
 - 参数、模型代码或数据口径变化时使用新 Run ID。
