@@ -5,10 +5,9 @@
 
 ## 当前状态（一句话）
 
-RTX 5090 与 data-v2 正式训练参数均已冻结，阶段 0 的正式 `000 Baseline` 已完成并核验。
-改进 A 已冻结为 Backbone P3/P4 的 SR-CBAM，独立分支、源码、模型 YAML、正式配置、测试、
-教学文档和云端实验步骤均已完成并推送。下一步由用户在云端拉取功能分支，执行 dry-run 和
-10 epoch 预检；尚未启动改进 A 的云端训练。
+RTX 5090 与 data-v2 正式训练参数均已冻结，正式 `000 Baseline` 和改进 A：P3/P4
+SR-CBAM 均已完成并核验。A 的 Mask mAP50 / mAP50-95 相对 `000` 为 -0.00248 / -0.01251，
+未通过单模块门控，不进入组合实验。下一步从正式 Baseline 基点独立冻结并实现改进 B：Dice。
 
 ## 已完成的关键步骤
 
@@ -53,6 +52,20 @@ RTX 5090 与 data-v2 正式训练参数均已冻结，阶段 0 的正式 `000 Ba
 - [x] 教学文档保存到 `knowledge/改进A-SR-CBAM注意力机制原理与实现.md`
 - [x] `实验步骤.md` 已切换为改进 A 的拉取、预检、正式训练、回传和登记流程
 - [x] Baseline 提交与改进 A 分支已推送到 GitHub
+- [x] 改进 A 正式训练完成 300 epoch：best epoch 235，official fitness 0.80644，Mask mAP50 / mAP50-95 为 0.70884 / 0.35097
+- [x] 改进 A 的 `best.pt` 中 α(P3/P4)=0.16722/0.09860；模块参与学习，但没有转化为总体分割收益
+- [x] 改进 A 已写入 `experiment_records/runs/data-v2-abl-100-srcbam-b16-s42.md`、`comparison.csv` 与实验总表
+- [x] 按预设门控淘汰当前 P3/P4 SR-CBAM，不运行包含 A 的组合长训
+
+## 正式改进 A 结果
+
+| Run ID | Best epoch | Official fitness | Mask P | Mask R | Mask mAP50 | Mask mAP50-95 | GPU_mem 峰值 | 时间 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `data-v2-abl-100-srcbam-b16-s42` | 235 | 0.80644 | 0.69962 | 0.64107 | 0.70884 | 0.35097 | 15.1 GB | 1.290 h |
+
+- 相对正式 `000`：official fitness -0.01333，Mask mAP50 -0.00248，Mask mAP50-95 -0.01251；top-5 / top-10 fitness 均值也分别低 0.00656 / 0.00484。
+- 分类别 Mask P/R/mAP50/mAP50-95：Rice leaffolder 为 0.676 / 0.582 / 0.662 / 0.262，Rice stemborers 为 0.724 / 0.690 / 0.753 / 0.438。
+- 当前工作点的 Mask P 和 F1 提高，但 Mask R、总体 AP 和卷叶螟指标下降，不能作为 A 的保留依据。
 
 ## 正式消融 Baseline 结果
 
@@ -103,18 +116,17 @@ Run ID：`data-v2-tune-mr2-nomix-e300-b16-s42`，相对当前最优 P1 `data-v2-
 
 ## 下一步
 
-1. 云端按 `实验步骤.md` 拉取 `feature/data-v2-abl-a-attention` 并执行 dry-run。
-2. 用户手动运行独立的 10 epoch 预检，确认权重迁移、两处 SR-CBAM、显存、Val 和保存流程。
-3. 预检通过后，由用户决定并手动启动 `data-v2-abl-100-srcbam-b16-s42` 的 300 epoch 正式训练。
-4. 正式 Run 回传后，与 `000` 比较并决定 A 是否进入组合实验。
-5. A 核验完成后，B：Dice 与 C：P2Head 分别从同一 Baseline 基点建立兄弟分支。
-6. Val 用于模型和方案比较；Test 只在最终方案与推理阈值冻结后统一执行。
+1. 冻结改进 B 的 `BCE + λ × Dice` 唯一公式、λ、smooth/epsilon、sigmoid 位置和聚合方式。
+2. 切回 `cloud/data-v2-5090` 的正式 Baseline 基点 `c0f4f35`，创建 B 的兄弟分支；不得从 A 分支继续开发。
+3. 完成 B 的源码、配置、聚焦测试、教学文档与 10 epoch 云端预检步骤，再由用户决定是否启动正式长训。
+4. B 完成后按同一门控决定是否保留，再独立处理 C：P2Head。
+5. Val 用于模型和方案比较；Test 只在最终方案与推理阈值冻结后统一执行。
 
 ## Git 与本地文件状态
 
 - 当前 Git 根目录：`E:\study\graduate_sec\论文撰写\模型训练`；正式 Baseline 分支为 `cloud/data-v2-5090`，记录提交为 `c0f4f35`，已推送。
-- 当前工作分支：`feature/data-v2-abl-a-attention`，基点为 `c0f4f35`，已推送并跟踪同名远端分支。
-- 云端下一步是拉取功能分支并按 `实验步骤.md` 执行；助手未启动训练。
+- 当前工作分支：`feature/data-v2-abl-a-attention`，基点为 `c0f4f35`；A 源码提交 `9d0c479` 已推送并完成正式验证。
+- 本次 A 分析记录尚未提交；下一开发分支应从 `cloud/data-v2-5090@c0f4f35` 创建。
 - `runs/` 与 `exports/` 按约定不进入 Git。
 
 ## 关键约束（快速提醒）
@@ -125,5 +137,6 @@ Run ID：`data-v2-tune-mr2-nomix-e300-b16-s42`，相对当前最优 P1 `data-v2-
 - 消融实验单变量原则：batch 统一为 16（含尺度对比的 l 模型与源码改动实验），不因 32GB 显存改用 batch=32
 - 参数优化 Run 只写 `parameter_tuning/` 并填总表表 2，不进入 `comparison.csv`
 - 只有参数冻结后、可用于期刊对比的正式 Run 才进入 `comparison.csv`
+- 当前 P3/P4 SR-CBAM 已淘汰；除非重新定义新的 A 并使用新 Run ID，否则不进入组合实验
 - 未经用户要求不启动下一轮长时间训练
 - 不覆盖已有 Run / 权重 / 记录；任何参数、代码或数据口径变化换新 Run ID

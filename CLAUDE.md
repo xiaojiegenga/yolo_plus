@@ -9,9 +9,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 这是什么项目
 
 无人机航拍水稻害虫实例分割实验仓库（继续使用 `xiaojiegenga/yolo_plus`，正式 Baseline
-分支为 `cloud/data-v2-5090`，当前改进 A 分支为 `feature/data-v2-abl-a-attention`）。
+分支为 `cloud/data-v2-5090`，改进 A 归档分支为 `feature/data-v2-abl-a-attention`）。
 数据集 `rice-pest-data-v2`，2 类（`Rice leaffolder`、
 `Rice stemborers`），主选择指标为 **Val Mask mAP50-95**。
+
+改进 A 正式实验已完成但未通过门控。下一步改进 B 必须从
+`cloud/data-v2-5090@c0f4f35` 建立兄弟分支，不得继承 A 的源码改动。
 
 开始任何工作前，先按顺序阅读（`PROGRESS.md` 是快速了解当前进展的入口，其余是规则与背景）：
 

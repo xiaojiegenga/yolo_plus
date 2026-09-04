@@ -1,6 +1,6 @@
 # data-v2 源码改进消融实验主计划
 
-> 状态：阶段 0 正式 Baseline 已完成并核验；改进 A 已冻结、实现并推送，待云端预检
+> 状态：正式 Baseline 与改进 A 均已完成并核验；当前 P3/P4 SR-CBAM 未通过门控
 > 当前核心任务：YOLO26m-seg 源码改进消融实验
 > 数据集：`rice-pest-data-v2`
 > 硬件：RTX 5090 云服务器
@@ -98,7 +98,7 @@ data-v2 新增卷叶螟中约 55.5% 符合上述小目标口径，中位等效�
 
 | 因素 | 候选改进 | 主要作用位置 | 目标问题 | 当前状态 |
 |---|---|---|---|---|
-| A | Selective Residual CBAM（SR-CBAM） | Backbone P3/P4 | 复杂背景下的特征选择 | 已冻结并完成本地实现 |
+| A | Selective Residual CBAM（SR-CBAM） | Backbone P3/P4 | 复杂背景下的特征选择 | 正式训练已完成；未通过门控，不进入组合 |
 | B | BCE + Dice 掩膜损失 | Loss | 掩膜区域重叠与边界质量 | 公式、权重和聚合方式待冻结 |
 | C | P2Head 小目标检测分支 | Neck + Segment Head | 小尺寸卷叶螟检测 | 建议在 data-v2 上重新验证 |
 
@@ -177,13 +177,13 @@ P2Head  = 源码中的 P2/4 小目标检测头
 | 编码 | A | B | C | 模型说明 | Run ID | 状态 |
 |---|---:|---:|---:|---|---|---|
 | 000 | × | × | × | 正式 YOLO26m Baseline | `data-v2-abl-000-y26m-b16-s42` | 已完成并核验 |
-| 100 | √ | × | × | A：P3/P4 SR-CBAM | `data-v2-abl-100-srcbam-b16-s42` | 已实现并推送，待云端预检 |
+| 100 | √ | × | × | A：P3/P4 SR-CBAM | `data-v2-abl-100-srcbam-b16-s42` | 已完成；Mask mAP50 / mAP50-95 为 0.70884 / 0.35097；淘汰 |
 | 010 | × | √ | × | B：Dice | `data-v2-abl-010-dice-b16-s42` | 定义待冻结 |
 | 001 | × | × | √ | C：P2Head | `data-v2-abl-001-p2head-b16-s42` | 定义待冻结 |
-| 110 | √ | √ | × | A+B | `data-v2-abl-110-attn-dice-b16-s42` | 门控后决定 |
-| 101 | √ | × | √ | A+C | `data-v2-abl-101-attn-p2head-b16-s42` | 门控后决定 |
+| 110 | √ | √ | × | A+B | `data-v2-abl-110-attn-dice-b16-s42` | 当前 A 未通过门控，不运行 |
+| 101 | √ | × | √ | A+C | `data-v2-abl-101-attn-p2head-b16-s42` | 当前 A 未通过门控，不运行 |
 | 011 | × | √ | √ | B+C | `data-v2-abl-011-dice-p2head-b16-s42` | 门控后决定 |
-| 111 | √ | √ | √ | A+B+C | `data-v2-abl-111-combined-b16-s42` | 门控后决定 |
+| 111 | √ | √ | √ | A+B+C | `data-v2-abl-111-combined-b16-s42` | 当前 A 未通过门控，不运行 |
 
 ### 6.2 组合实验门控规则
 
@@ -342,7 +342,8 @@ E:\Study\DeepCNN\yolo26\yolo_plus
 - [x] 冻结 A：SR-CBAM 的唯一公式、P3/P4 插入位置和超参数；
 - [x] 在独立分支完成 A 的源码、模型 YAML、正式配置、权重键兼容检查和教学文档；
 - [x] 提交并推送 A 分支；
-- [ ] 在云端运行 10 epoch 预检；
+- [x] 在云端完成预检和 300 epoch 正式训练并回传；
+- [x] 完成 A 与 `000` 的严格配对分析；A 未通过门控，不进入组合；
 - [ ] 后续分别冻结 B：Dice 与 C：P2Head 的唯一实现；
 - [ ] 完成单模块正式消融，再决定组合矩阵；
 - [ ] 最终 `Ours` 冻结后再开展跨模型对比；
