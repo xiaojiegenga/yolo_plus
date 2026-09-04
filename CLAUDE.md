@@ -13,8 +13,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 数据集 `rice-pest-data-v2`，2 类（`Rice leaffolder`、
 `Rice stemborers`），主选择指标为 **Val Mask mAP50-95**。
 
-改进 A1 正式实验已完成但未通过门控。A2 已改为 P3-only Zero-init Residual CBAM，
-当前 Run ID 为 `data-v2-abl-a2-p3-zrcbam-b16-s42`，待云端预检与正式训练。
+改进 A1 正式实验已完成但未通过门控。A2 使用 P3-only Zero-init Residual CBAM，
+Run ID 为 `data-v2-abl-a2-p3-zrcbam-b16-s42`；正式训练结果已回传本地，待后续分析。
 
 开始任何工作前，先按顺序阅读（`PROGRESS.md` 是快速了解当前进展的入口，其余是规则与背景）：
 

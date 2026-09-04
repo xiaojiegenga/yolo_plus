@@ -2,8 +2,8 @@
 
 本项目继续使用 [xiaojiegenga/yolo_plus](https://github.com/xiaojiegenga/yolo_plus)，
 正式 Baseline 分支为 `cloud/data-v2-5090`；改进 A 分支为
-`feature/data-v2-abl-a-attention`。A1 已完成正式验证但未通过门控，当前已完成 A2 的
-本地实现，下一步在 RTX 5090 上预检并训练 A2。
+`feature/data-v2-abl-a-attention`。A1 已完成正式验证但未通过门控；A2 已完成正式训练，
+完整 Run 和日志已回传本地，等待后续分析。
 
 ## 工作模式
 
@@ -51,7 +51,7 @@
 
 - `000 Baseline`：`experiments/data-v2-abl-000-y26m-b16-s42.yaml`（已完成）
 - `100 SR-CBAM`：`experiments/data-v2-abl-100-srcbam-b16-s42.yaml`（A1 已完成；未通过门控）
-- `A2 P3 ZR-CBAM`：`experiments/data-v2-abl-a2-p3-zrcbam-b16-s42.yaml`（待云端训练）
+- `A2 P3 ZR-CBAM`：`experiments/data-v2-abl-a2-p3-zrcbam-b16-s42.yaml`（已训练并回传；待分析）
 - 云端数据：`experiments/yolo_data_v2_cloud.yaml`
 - 默认数据根目录：`/root/yolo_data`
 
@@ -72,7 +72,7 @@
 └─ labels/test
 ```
 
-首次拉取当前改进 A2 时使用：
+复现改进 A2 时使用：
 
 ```bash
 git clone --branch feature/data-v2-abl-a-attention https://github.com/xiaojiegenga/yolo_plus.git yolo_plus
@@ -88,9 +88,8 @@ git pull --ff-only
 ```
 
 RTX 5090 和表 1 训练参数均已冻结。A1 正式结果见
-`experiment_records/runs/data-v2-abl-100-srcbam-b16-s42.md`；当前 A2 正式 Run ID 为
-`data-v2-abl-a2-p3-zrcbam-b16-s42`，完整 dry-run、预检、训练和回传命令见
-`实验步骤.md`。
+`experiment_records/runs/data-v2-abl-100-srcbam-b16-s42.md`。A2 正式 Run ID 为
+`data-v2-abl-a2-p3-zrcbam-b16-s42`，完整 Run 已回传本地，正式指标待后续分析。
 
 入口会保留镜像自带的 PyTorch，并在缺少其他依赖时安装仓库内
 `ultralytics-main`。首次使用官方 `yolo26m-seg.pt` 时可能需要联网下载权重。

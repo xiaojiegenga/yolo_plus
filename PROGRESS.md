@@ -5,10 +5,9 @@
 
 ## 当前状态（一句话）
 
-RTX 5090 与 data-v2 正式训练参数均已冻结。改进 A1：P3/P4 SR-CBAM 已完成，但其
-Mask mAP50 / mAP50-95 相对 `000` 为 -0.00248 / -0.01251。A2 已改为仅在 P3 插入
-零初始化加法残差 CBAM，代码、配置和本地聚焦测试已完成，下一步在云端进行 10 epoch
-预检并由用户手动启动正式训练。
+RTX 5090 与 data-v2 正式训练参数均已冻结。改进 A1：P3/P4 SR-CBAM 已完成但未通过
+门控。A2：P3 ZR-CBAM 已完成正式训练，完整 Run 和训练日志已回传并解包到本地，结果
+暂不分析。下一步切换到独立 B 分支开展 Instance Dice 正式实验。
 
 ## 已完成的关键步骤
 
@@ -61,6 +60,7 @@ Mask mAP50 / mAP50-95 相对 `000` 为 -0.00248 / -0.01251。A2 已改为仅在 
 - [x] A2 冻结为 P3-only Zero-init Residual CBAM：`Y=X+β×CBAM(X)`，`β=0` 初始化
 - [x] 新增 `ZeroInitResidualCBAM`、`C3k2ZRCBAM`、A2 模型 YAML 和正式训练配置
 - [x] A2 聚焦测试通过：4 passed；初始输出严格恒等，只在 Backbone P3 使用新模块
+- [x] A2 正式训练已完成，完整 Run 与训练日志已回传并解包到 `runs/data-v2-abl-a2-p3-zrcbam-b16-s42/`
 
 ## 正式改进 A1 结果
 
@@ -121,17 +121,15 @@ Run ID：`data-v2-tune-mr2-nomix-e300-b16-s42`，相对当前最优 P1 `data-v2-
 
 ## 下一步
 
-1. 云端拉取 `feature/data-v2-abl-a-attention` 的最新 A2 提交。
-2. 按 `实验步骤.md` 先执行 dry-run，再运行唯一 Run ID 的 10 epoch 预检。
-3. 预检通过后，由用户手动启动 `data-v2-abl-a2-p3-zrcbam-b16-s42` 的 300 epoch 正式训练。
-4. 回传完整 Run 后，将 A2 与 `000`、A1 严格比较，再决定是否保留改进 A。
-5. A 的方向确定后再独立处理 B：Dice；Val 用于选方案，Test 仍不参与调参。
+1. 切换到 `feature/data-v2-abl-b-dice`，云端按 B 分支的 `实验步骤.md` 启动预检和正式训练。
+2. B 进入训练后，再读取 A2 Run，将 A2 与 `000`、A1 严格比较并登记正式结果。
+3. Val 用于选方案，Test 仍不参与调参。
 
 ## Git 与本地文件状态
 
 - 当前 Git 根目录：`E:\study\graduate_sec\论文撰写\模型训练`；正式 Baseline 分支为 `cloud/data-v2-5090`，记录提交为 `c0f4f35`，已推送。
 - 当前工作分支：`feature/data-v2-abl-a-attention`，基点为 `c0f4f35`；A1 源码提交为 `9d0c479`，结果提交为 `ac11686`。
-- A2 在当前 A 分支继续迭代，使用新的模型 YAML、配置和 Run ID；推送后云端只拉取该分支最新提交。
+- A2 原始结果已位于本地忽略目录，当前 A 分支只提交“已回传、待分析”的轻量状态。
 - `runs/` 与 `exports/` 按约定不进入 Git。
 
 ## 关键约束（快速提醒）
