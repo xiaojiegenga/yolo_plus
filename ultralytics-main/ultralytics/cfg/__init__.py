@@ -203,6 +203,8 @@ CFG_FLOAT_KEYS = frozenset(
         "time",
         "workspace",
         "batch",
+        "instance_dice_gain",
+        "instance_dice_smooth",
     }
 )
 CFG_FRACTION_KEYS = frozenset(
