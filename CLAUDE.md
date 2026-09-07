@@ -16,9 +16,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 改进 A1 正式实验已完成但未通过门控。A2 已改为 P3-only Zero-init Residual CBAM，
 Run ID 为 `data-v2-abl-a2-p3-zrcbam-b16-s42`，已完成并核验，近似持平，暂不进入组合。
 B 在独立 `feature/data-v2-abl-b-dice` 分支实现；完整 Run 已核验，300 epoch、best 243，未通过门控。
-C 在独立 `feature/data-v2-abl-c-p2head` 分支实现；本地测试与官方权重迁移已通过，待云端预检与正式训练。
+C 在独立 `feature/data-v2-abl-c-p2head` 分支实现；完整 Run 已核验，300 epoch、best 282，未通过门控；总体分析与小目标配对评估已登记。
 当前状态以 `PROGRESS.md` 为准，本机环境见 `LOCAL_SETUP.local.md`。
-A、B 知识文档与结果统一在总体分析分支维护；阶段总结见 `experiment_records/data-v2-ab-summary.md`。
+A、B、C 知识文档与结果统一在总体分析分支维护；阶段总结见 `experiment_records/data-v2-ab-summary.md`。
 
 开始任何工作前，先按顺序阅读（`PROGRESS.md` 是快速了解当前进展的入口，其余是规则与背景）：
 

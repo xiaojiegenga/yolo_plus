@@ -5,6 +5,8 @@
 - `transfer_run.py`：云端打包完整 Run，本地解包回 `runs/`。
 - `fill_results_table.py`：仅从正式训练的 `results.csv` 按 Ultralytics 官方分割 fitness（Box mAP50-95 + Mask mAP50-95）选择最佳轮次并更新 `experiment_records/comparison.csv`；默认写入 `data-v2`，也可用 `--data` 指定数据版本。分类别指标仍从独立验证输出或曲线证据人工补录。
 
+- `evaluate_c_small_val.py`：本地对 000/C 的 best.pt 做相同协议的小目标 Val 评估；需要 C 源码目录与 `pycocotools==2.0.11`，复现命令及口径见 `experiment_records/evaluations/data-v2-c-small-val.md`。
+
 云端只运行训练和打包；`fill_results_table.py` 只在本地使用。当前入口不执行
 哈希、manifest 或备份检查。预检不运行结果回填脚本，也不建立单次记录。参数优化
 长训须由用户明确启动，只写 `experiment_records/parameter_tuning/` 和总表表 2；参数

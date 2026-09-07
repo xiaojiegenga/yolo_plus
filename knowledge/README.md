@@ -12,4 +12,4 @@ B 文档从 `feature/data-v2-abl-b-dice` 的 `cef6b0b` 原样复制，其中的�
 训练配置路径对应 B 分支。总体分析分支保留 A 源码，B 的独立实现仍由 B 分支保存。
 
 知识文档用于解释设计；实际训练结论以 [A、B 改进完成总结](../experiment_records/data-v2-ab-summary.md)
-和其中链接的正式 Run 记录为准。A2 的结构、参数与结果见 [A2 正式记录](../experiment_records/runs/data-v2-abl-a2-p3-zrcbam-b16-s42.md)。
+和其中链接的正式 Run 记录为准。C 已完成，见 [C 正式记录](../experiment_records/runs/data-v2-abl-001-p2head-b16-s42.md) 与 [小目标专项评估](../experiment_records/evaluations/data-v2-c-small-val.md)。A2 的结构、参数与结果见 [A2 正式记录](../experiment_records/runs/data-v2-abl-a2-p3-zrcbam-b16-s42.md)。
