@@ -9,8 +9,19 @@ RTX 5090 与 data-v2 正式训练参数均已冻结。A2 已完成并回传，ep
 best epoch 176；相对 `000` 的 Mask mAP50 / mAP50-95 为 +0.00374 / -0.00239，
 近似持平，暂不进入组合。B 完整 Run 已回传并核验，完成 300 epoch，best epoch 243；
 Mask mAP50 / mAP50-95 为 0.68016 / 0.34625，较 `000` 下降 0.03116 / 0.01723，
-本次 BCE + 0.5 × Soft Dice 未通过门控，不进入组合。下一步独立准备 C：P2Head。
-本机开发环境已初始化，源码继续位于 A 分支，独立 B 分支已建立本地跟踪。
+本次 BCE + 0.5 × Soft Dice 未通过门控，不进入组合。C：轻量 P2Head 已完成代码、配置与本地验证，待 RTX 5090 的 10 epoch 预检和用户手动正式训练。
+总体分析继续在 A 分支维护；C 独立实现位于 `feature/data-v2-abl-c-p2head`，从正式 Baseline `c0f4f35` 创建。
+
+## 改进 C 准备状态
+
+- 独立实现提交：`feature/data-v2-abl-c-p2head` / `b8001b6`，从 Baseline `c0f4f35` 创建；当前工作区已回到 A 总体分析分支。
+- 结构：轻量 P2 旁路，Head 为 `Segment26P2Lite`，stride=4/8/16/32；保留原 P3/P4/P5 和 P3-based Proto。
+- 正式配置：C 分支 `experiments/data-v2-abl-001-p2head-b16-s42.yaml`；所有 train 参数与 000 相同。
+- 本地 5 项聚焦测试通过：语义迁移、80→2 类重建、四尺度/Proto 尺寸、checkpoint 融合、真实分割损失正样本与空样本反向、配方一致性。
+- 官方 `yolo26m-seg.pt` 到 2 类 C 模型迁移已验证，匹配 890/1078 个状态张量；14 个类别相关张量因形状变化不迁移，174 个为新增 P2 参数/缓冲张量。
+- 2 类模型 fused Params=23,757,752，较 000 +248,742；GFLOPs@640=133.213389，较 000 +12.042240（约 9.94%）。
+- 知识文档：`knowledge/改进C-P2Head小目标分支原理与实现.md`；操作入口：`实验步骤.md`。
+- 尚未启动云端预检或正式训练，显存与精度待实测；C 不写入 completed 结果行。
 
 ## 已完成的关键步骤
 
@@ -159,7 +170,7 @@ Run ID：`data-v2-tune-mr2-nomix-e300-b16-s42`，相对当前最优 P1 `data-v2-
 ## 下一步
 
 1. A1 与本次 B 均未通过门控；A2 近似持平，暂不进入注意力组合，保留全部正式结果。
-2. 独立准备 C：P2Head 的定义、配置和单模块验证，按证据决定必要组合。
+2. 云端拉取 C 分支，按 `实验步骤.md` 完成检查和 10 epoch 预检，再由用户手动启动 C 正式训练。
 3. 当前不启动 A+B、B+C 或 A+B+C；若重新设计 A/B，需独立假设和新 Run ID。
 4. 本机通过 `.venv/Scripts/python.exe` 开发和分析；环境入口见 `LOCAL_SETUP.local.md`。
 5. Val 用于选方案；Test 保留到最终模型与阈值冻结后统一评估。
@@ -169,7 +180,7 @@ Run ID：`data-v2-tune-mr2-nomix-e300-b16-s42`，相对当前最优 P1 `data-v2-
 - 当前 Git 根目录：`E:\Study\论文撰写\yolo_plus`；当前总体分析分支为 `feature/data-v2-abl-a-attention`，A2 实现提交为 `a38aabf`。
 - 正式 Baseline 分支为 `cloud/data-v2-5090`，记录提交为 `c0f4f35`；A1 源码为 `9d0c479`、结果记录为 `ac11686`；A2 实现为 `a38aabf`。
 - B 本地分支 `feature/data-v2-abl-b-dice` 跟踪同名远端分支，当前为 `cef6b0b`，源码提交为 `1d1a71e`。B 从 `c0f4f35` 独立分叉，不含注意力改动。
-- `feature/data-v2-abl-a-attention` 为总体分析分支，统一维护 A、B 知识文档、实验记录与阶段总结；B 配置与损失源码仍由 B 分支维护。
+- `feature/data-v2-abl-a-attention` 为总体分析分支，统一维护 A、B、C 知识文档、实验记录与阶段总结；B 配置与损失源码仍由 B 分支维护。
 - `.venv` 基于本机 `D:\tool\Anaconda3\envs\yolo26`：Python 3.10.19、PyTorch 2.10.0+cu130、Ultralytics 8.4.80；本地环境用于开发与结果读取，云端正式环境仍以表 3 和 Run 日志为准。
 - `runs/`、`exports/`、本机环境与本地配置按约定不进入 Git；GitHub 同步知识文档、轻量分析记录与汇总表。
 

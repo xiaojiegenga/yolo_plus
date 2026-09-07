@@ -100,7 +100,7 @@ data-v2 新增卷叶螟中约 55.5% 符合上述小目标口径，中位等效�
 |---|---|---|---|---|
 | A | A1：P3/P4 SR-CBAM；A2：P3 ZR-CBAM | Backbone | 复杂背景下的特征选择 | A1 未通过门控；A2 近似持平，暂不进入组合 |
 | B | BCE + Dice 掩膜损失 | Loss | 掩膜区域重叠与边界质量 | 已完成并核验；Mask AP 与两类别 AP 下降，未通过门控 |
-| C | P2Head 小目标检测分支 | Neck + Segment Head | 小尺寸卷叶螟检测 | 建议在 data-v2 上重新验证 |
+| C | P2Head 小目标检测分支 | Neck + Segment Head | 小尺寸卷叶螟检测 | 轻量 P2 旁路已实现并通过本地验证，待云端预检与正式训练 |
 
 ### 4.1 A1：SR-CBAM 已验证定义
 
@@ -144,7 +144,17 @@ data-v2 新增卷叶螟中约 55.5% 符合上述小目标口径，中位等效�
 
 不得在正式 B 实验完成后根据结果继续调整 `λ`，否则 B 将重新变成参数优化实验。
 
-### 4.4 C：P2Head 冻结原则
+### 4.4 C：P2Head 冻结定义
+
+实现分支 `feature/data-v2-abl-c-p2head` 从 `c0f4f35` 独立创建。保留层 0–22，在 Neck P3
+和 Backbone P2 各用 1×1 Conv 投影到 64 通道；P3 上采样后拼接，单次 C3k2 融合为
+128 通道 P2。四尺度 `Segment26P2Lite` 的输入为层 27/16/19/22，Proto 仅使用后三个尺度。
+P2 Box/Mask 隐藏通道 32、类别隐藏通道 128，`C3k2` 按 m 尺度使用 c3k=True、e=0.5。
+官方预训练原 Head 的 P3/P4/P5 分支从索引 0/1/2 迁移到 1/2/3；P2 按 seed=42 初始化。
+2 类模型 fused Params=23,757,752，GFLOPs@640=133.213389；本地 5 项测试与官方权重迁移通过。
+配置为 C 分支 `experiments/data-v2-abl-001-p2head-b16-s42.yaml`，知识文档位于 `knowledge/改进C-P2Head小目标分支原理与实现.md`。
+
+冻结边界：
 
 - 只增加 P2 Neck 路径和 P2 检测/Mask coefficient 分支；
 - 保留标准 P3 Mask Proto，不提高 Proto 原生分辨率；
@@ -199,7 +209,7 @@ P2Head  = 源码中的 P2/4 小目标检测头
 | 100 | √ | × | × | A1：P3/P4 SR-CBAM | `data-v2-abl-100-srcbam-b16-s42` | 已完成；Mask mAP50 / mAP50-95 为 0.70884 / 0.35097；淘汰 |
 | A2 候选 | √* | × | × | P3 ZR-CBAM，决定是否重新定义 A | `data-v2-abl-a2-p3-zrcbam-b16-s42` | 已完成并核验；近似持平，暂不进入组合 |
 | 010 | × | √ | × | B：Dice | `data-v2-abl-010-dice-b16-s42` | 已完成并核验；300 epoch，best 243；未通过门控 |
-| 001 | × | × | √ | C：P2Head | `data-v2-abl-001-p2head-b16-s42` | 定义待冻结 |
+| 001 | × | × | √ | C：P2Head | `data-v2-abl-001-p2head-b16-s42` | 定义与代码已冻结，本地验证通过，待云端预检与正式训练 |
 | 110 | √ | √ | × | A+B | `data-v2-abl-110-attn-dice-b16-s42` | A2 暂不组合；B 未通过门控，不运行 |
 | 101 | √ | × | √ | A+C | `data-v2-abl-101-attn-p2head-b16-s42` | A2 暂不进入组合；C 待独立验证 |
 | 011 | × | √ | √ | B+C | `data-v2-abl-011-dice-p2head-b16-s42` | B 未通过门控，不运行 |
@@ -370,7 +380,8 @@ E:\Study\DeepCNN\yolo26\yolo_plus
 - [x] A2 正式训练结果回传并核验；best epoch 176，epoch 276 正常早停，近似持平，暂不进入组合；
 - [x] B：Dice 的唯一实现已在独立分支冻结，完整 Run 已回传；
 - [x] B best epoch 243 精确指标与权重核验通过，已正式登记；未通过门控，不进入组合；
-- [ ] 后续冻结 C：P2Head 的唯一实现；
+- [x] 冻结并实现 C：轻量 P2Head，完成本地测试与官方预训练权重迁移检查；
+- [ ] 在 RTX 5090 上完成 C 的 10 epoch 预检和用户手动正式训练；
 - [ ] 完成单模块正式消融，再决定组合矩阵；
 - [ ] 最终 `Ours` 冻结后再开展跨模型对比；
 - [ ] Test 保留到最终模型与阈值全部冻结后统一执行。
