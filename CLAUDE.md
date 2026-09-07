@@ -9,12 +9,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 这是什么项目
 
 无人机航拍水稻害虫实例分割实验仓库（继续使用 `xiaojiegenga/yolo_plus`，正式 Baseline
-分支为 `cloud/data-v2-5090`，改进 A 分支为 `feature/data-v2-abl-a-attention`）。
+分支为 `cloud/data-v2-5090`，总体分析与改进 A 源码分支为 `feature/data-v2-abl-a-attention`）。
 数据集 `rice-pest-data-v2`，2 类（`Rice leaffolder`、
 `Rice stemborers`），主选择指标为 **Val Mask mAP50-95**。
 
 改进 A1 正式实验已完成但未通过门控。A2 已改为 P3-only Zero-init Residual CBAM，
-当前 Run ID 为 `data-v2-abl-a2-p3-zrcbam-b16-s42`，待云端预检与正式训练。
+Run ID 为 `data-v2-abl-a2-p3-zrcbam-b16-s42`，已完成并核验，近似持平，暂不进入组合。
+B 在独立 `feature/data-v2-abl-b-dice` 分支实现；完整 Run 已核验，300 epoch、best 243，未通过门控。
+当前状态以 `PROGRESS.md` 为准，本机环境见 `LOCAL_SETUP.local.md`。
+A、B 知识文档与结果统一在总体分析分支维护；阶段总结见 `experiment_records/data-v2-ab-summary.md`。
 
 开始任何工作前，先按顺序阅读（`PROGRESS.md` 是快速了解当前进展的入口，其余是规则与背景）：
 

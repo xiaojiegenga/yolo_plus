@@ -1,17 +1,20 @@
 # 项目进展记录
 
 > 用途：在不同模型 / 会话之间切换时，快速了解项目当前进展。这里只放**已完成的关键步骤**和**运行结果**；固定规则与架构见 `CLAUDE.md` 与 `AGENTS.md`，实验方案细节见 `云服务器实验设计与记录表.md`。
-> 最后更新：2026-09-04
+> 最后更新：2026-09-07
 
 ## 当前状态（一句话）
 
-RTX 5090 与 data-v2 正式训练参数均已冻结。改进 A1：P3/P4 SR-CBAM 已完成，但其
-Mask mAP50 / mAP50-95 相对 `000` 为 -0.00248 / -0.01251。A2 已改为仅在 P3 插入
-零初始化加法残差 CBAM，代码、配置和本地聚焦测试已完成，下一步在云端进行 10 epoch
-预检并由用户手动启动正式训练。
+RTX 5090 与 data-v2 正式训练参数均已冻结。A2 已完成并回传，epoch 276 正常早停，
+best epoch 176；相对 `000` 的 Mask mAP50 / mAP50-95 为 +0.00374 / -0.00239，
+近似持平，暂不进入组合。B 完整 Run 已回传并核验，完成 300 epoch，best epoch 243；
+Mask mAP50 / mAP50-95 为 0.68016 / 0.34625，较 `000` 下降 0.03116 / 0.01723，
+本次 BCE + 0.5 × Soft Dice 未通过门控，不进入组合。下一步独立准备 C：P2Head。
+本机开发环境已初始化，源码继续位于 A 分支，独立 B 分支已建立本地跟踪。
 
 ## 已完成的关键步骤
 
+- [x] 确定 `feature/data-v2-abl-a-attention` 为总体分析分支，汇总 A1、A2、B 的结果；原样收录 B 分支 `cef6b0b` 的 `knowledge` 文档，阶段总结见 `experiment_records/data-v2-ab-summary.md`
 - [x] 建立 data-v2 云训练工作流：`scripts/cloud_train_data_v2.py`、`train_yolo26_seg.py`、`transfer_run.py`、`fill_results_table.py`
 - [x] 新增预检配置 `experiments/yolo26m_seg_5090.yaml` 与云端数据 `experiments/yolo_data_v2_cloud.yaml`
 - [x] 已建立三因素消融、模型尺度、跨代对比、稳定性复验和 Test 评估表格框架；正式训练参数已由 P2 冻结
@@ -61,6 +64,40 @@ Mask mAP50 / mAP50-95 相对 `000` 为 -0.00248 / -0.01251。A2 已改为仅在 
 - [x] A2 冻结为 P3-only Zero-init Residual CBAM：`Y=X+β×CBAM(X)`，`β=0` 初始化
 - [x] 新增 `ZeroInitResidualCBAM`、`C3k2ZRCBAM`、A2 模型 YAML 和正式训练配置
 - [x] A2 聚焦测试通过：4 passed；初始输出严格恒等，只在 Backbone P3 使用新模块
+
+- [x] 本机项目迁移到 `E:\Study\论文撰写\yolo_plus`，拉取 A、B 远端分支并建立 B 本地跟踪
+- [x] 建立本地 `.venv`，复用本机 `yolo26` Conda 依赖，当前仓库 Ultralytics 以 editable 模式安装；依赖检查、4 项注意力测试和 A2 dry-run 通过
+- [x] A2 完整 Run 已核验：连续 276 epoch，best epoch 176，CSV、训练日志与 best.pt 的 train_metrics 一致
+- [x] A2 已写入单次记录、`comparison.csv` 与实验总表；Mask mAP50 / mAP50-95 为 0.71506 / 0.36109
+- [x] B 独立实现已从远端同步：`feature/data-v2-abl-b-dice`，源码 `1d1a71e`，文档 `cef6b0b`；实例 BCE + 0.5 × Soft Dice，smooth=1.0
+- [x] B 完整 Run 已回传并核验：300 epoch，best 243；CSV 与两份权重 train_metrics 一致；实际参数只新增两个 Dice 参数
+- [x] B 已写入正式记录、comparison.csv 与总表；Mask mAP50 / mAP50-95 为 0.68016 / 0.34625，按门控淘汰本次 B 实现
+
+## 正式改进 A2 结果
+
+| Run ID | 实际 / Best epoch | Official fitness | Mask P | Mask R | Mask mAP50 | Mask mAP50-95 | GPU_mem 峰值 | 时间 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `data-v2-abl-a2-p3-zrcbam-b16-s42` | 276 / 176 | 0.82146 | 0.66346 | 0.67319 | 0.71506 | 0.36109 | 15.6 GB | 1.134 h |
+
+- 相对 `000`：fitness +0.00169，Mask mAP50 +0.00374，Mask mAP50-95 -0.00239；近似持平，尚无进入组合所需的明确收益。
+- best.pt 复核分类别 Mask P/R/mAP50/mAP50-95：卷叶螟 0.598 / 0.649 / 0.655 / 0.262；钻心虫 0.727 / 0.701 / 0.773 / 0.463。卷叶螟 AP 未改善。
+- best.pt 的 β=0.481689453125；注意力分支参与学习，但不能据此判断有效。
+- epoch 276 按 patience=100 正常早停；仅 epoch 3 的四项 Val loss 为 NaN，全部训练损失、P/R/mAP 与两份权重状态张量有限。
+- 证据：`experiment_records/runs/data-v2-abl-a2-p3-zrcbam-b16-s42.md`；完整 Run 位于同名 `runs/` 目录。
+
+## 正式改进 B 结果
+
+| Run ID | 实际 / Best epoch | Official fitness | Mask P | Mask R | Mask mAP50 | Mask mAP50-95 | GPU_mem 峰值 | 时间 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `data-v2-abl-010-dice-b16-s42` | 300 / 243 | 0.80359 | 0.70942 | 0.59795 | 0.68016 | 0.34625 | 16.3 GB | 1.331 h |
+
+- 相对 `000`：fitness -0.01618；Mask mAP50 / mAP50-95 -0.03116 / -0.01723；Mask R -0.07457。当前 B 未通过门控，不进入组合。
+- top-5 / top-10 fitness 为 0.795822 / 0.792326，较 `000` 低 0.012996 / 0.012302；负结果不只体现在单个最佳 epoch。
+- 训练结束 best.pt 分类型 Mask P/R/mAP50/mAP50-95：卷叶螟 0.678 / 0.602 / 0.651 / 0.260；钻心虫 0.739 / 0.596 / 0.711 / 0.433，两类别 AP 均下降。
+- 完成全部 300 epoch，4792.11 s，较 Baseline 增加 8.50%；权重大小 54.524209 MB，推理结构和参数量保持 Baseline。
+- epoch 4、6 有部分 Val loss NaN；全部训练损失、P/R/mAP 和两份权重张量有限。B seg_loss 含额外 Dice 项，不能直接与 Baseline 的绝对值比较。
+- 完整证据与结论：`experiment_records/runs/data-v2-abl-010-dice-b16-s42.md`；原始文件为同名 `runs/` 目录中的 args、CSV、权重和日志。
+- 源码实现提交 `1d1a71e`；日志未记录实际训练 commit，只有 seed=42，不推广为所有 Dice 方案无效。
 
 ## 正式改进 A1 结果
 
@@ -121,18 +158,20 @@ Run ID：`data-v2-tune-mr2-nomix-e300-b16-s42`，相对当前最优 P1 `data-v2-
 
 ## 下一步
 
-1. 云端拉取 `feature/data-v2-abl-a-attention` 的最新 A2 提交。
-2. 按 `实验步骤.md` 先执行 dry-run，再运行唯一 Run ID 的 10 epoch 预检。
-3. 预检通过后，由用户手动启动 `data-v2-abl-a2-p3-zrcbam-b16-s42` 的 300 epoch 正式训练。
-4. 回传完整 Run 后，将 A2 与 `000`、A1 严格比较，再决定是否保留改进 A。
-5. A 的方向确定后再独立处理 B：Dice；Val 用于选方案，Test 仍不参与调参。
+1. A1 与本次 B 均未通过门控；A2 近似持平，暂不进入注意力组合，保留全部正式结果。
+2. 独立准备 C：P2Head 的定义、配置和单模块验证，按证据决定必要组合。
+3. 当前不启动 A+B、B+C 或 A+B+C；若重新设计 A/B，需独立假设和新 Run ID。
+4. 本机通过 `.venv/Scripts/python.exe` 开发和分析；环境入口见 `LOCAL_SETUP.local.md`。
+5. Val 用于选方案；Test 保留到最终模型与阈值冻结后统一评估。
 
 ## Git 与本地文件状态
 
-- 当前 Git 根目录：`E:\study\graduate_sec\论文撰写\模型训练`；正式 Baseline 分支为 `cloud/data-v2-5090`，记录提交为 `c0f4f35`，已推送。
-- 当前工作分支：`feature/data-v2-abl-a-attention`，基点为 `c0f4f35`；A1 源码提交为 `9d0c479`，结果提交为 `ac11686`。
-- A2 在当前 A 分支继续迭代，使用新的模型 YAML、配置和 Run ID；推送后云端只拉取该分支最新提交。
-- `runs/` 与 `exports/` 按约定不进入 Git。
+- 当前 Git 根目录：`E:\Study\论文撰写\yolo_plus`；当前总体分析分支为 `feature/data-v2-abl-a-attention`，A2 实现提交为 `a38aabf`。
+- 正式 Baseline 分支为 `cloud/data-v2-5090`，记录提交为 `c0f4f35`；A1 源码为 `9d0c479`、结果记录为 `ac11686`；A2 实现为 `a38aabf`。
+- B 本地分支 `feature/data-v2-abl-b-dice` 跟踪同名远端分支，当前为 `cef6b0b`，源码提交为 `1d1a71e`。B 从 `c0f4f35` 独立分叉，不含注意力改动。
+- `feature/data-v2-abl-a-attention` 为总体分析分支，统一维护 A、B 知识文档、实验记录与阶段总结；B 配置与损失源码仍由 B 分支维护。
+- `.venv` 基于本机 `D:\tool\Anaconda3\envs\yolo26`：Python 3.10.19、PyTorch 2.10.0+cu130、Ultralytics 8.4.80；本地环境用于开发与结果读取，云端正式环境仍以表 3 和 Run 日志为准。
+- `runs/`、`exports/`、本机环境与本地配置按约定不进入 Git；GitHub 同步知识文档、轻量分析记录与汇总表。
 
 ## 关键约束（快速提醒）
 
@@ -142,6 +181,6 @@ Run ID：`data-v2-tune-mr2-nomix-e300-b16-s42`，相对当前最优 P1 `data-v2-
 - 消融实验单变量原则：batch 统一为 16（含尺度对比的 l 模型与源码改动实验），不因 32GB 显存改用 batch=32
 - 参数优化 Run 只写 `parameter_tuning/` 并填总表表 2，不进入 `comparison.csv`
 - 只有参数冻结后、可用于期刊对比的正式 Run 才进入 `comparison.csv`
-- 当前 P3/P4 SR-CBAM（A1）已淘汰；P3 ZR-CBAM（A2）必须用新 Run ID 完成独立验证后再判断
+- A1 与本次 B 已淘汰；A2 近似持平，暂不进入组合；四组正式结果均已登记
 - 未经用户要求不启动下一轮长时间训练
 - 不覆盖已有 Run / 权重 / 记录；任何参数、代码或数据口径变化换新 Run ID

@@ -1,9 +1,9 @@
 # YOLO 水稻害虫实例分割实验
 
 本项目继续使用 [xiaojiegenga/yolo_plus](https://github.com/xiaojiegenga/yolo_plus)，
-正式 Baseline 分支为 `cloud/data-v2-5090`；改进 A 分支为
-`feature/data-v2-abl-a-attention`。A1 已完成正式验证但未通过门控，当前已完成 A2 的
-本地实现，下一步在 RTX 5090 上预检并训练 A2。
+正式 Baseline 分支为 `cloud/data-v2-5090`；总体分析与改进 A 源码分支为
+`feature/data-v2-abl-a-attention`。A1 未通过门控；A2 已完成正式训练并核验，相对 Baseline 近似持平，暂不进入组合。
+独立 B 分支 `feature/data-v2-abl-b-dice` 的完整 Run 已回传并核验，本次 Dice 未通过门控。
 
 ## 工作模式
 
@@ -22,6 +22,8 @@
 读取已提交的参数、执行训练和打包 Run，不在云端修改配置或填写实验表格。
 
 当前实验进展先看 `PROGRESS.md`；完整实验表看 `云服务器实验设计与记录表.md`。
+A、B 已完成阶段的结论见 [A、B 改进完成总结](experiment_records/data-v2-ab-summary.md)；
+原理与实现文档统一收录在 [knowledge](knowledge/README.md)。
 
 ## 项目结构
 
@@ -40,6 +42,19 @@
 `experiment_records/parameter_tuning/` 并回填总表表 2；参数冻结后、可用于期刊对比
 的正式实验才写入 `experiment_records/runs/` 和 `comparison.csv`。
 
+## 本机开发环境
+
+当前电脑已建立 `.venv` 并安装仓库内 Ultralytics，可在 PowerShell 项目根目录执行：
+
+```powershell
+$env:YOLO_CONFIG_DIR = Join-Path (Get-Location) '.cache\ultralytics'
+$env:PYTHONUTF8 = '1'
+.\.venv\Scripts\python.exe scripts/fill_results_table.py --help
+```
+
+本地环境与解释器配置见 `LOCAL_SETUP.local.md`（仅保存在本机）。正式训练环境仍以
+实验表和云端 Run 日志为准。B 的实现保存在独立分支，当前 A 分支负责本次结果汇总。
+
 ## 一、本地开发
 
 1. 修改 `ultralytics-main/`、`scripts/` 或 `experiments/`。
@@ -51,7 +66,8 @@
 
 - `000 Baseline`：`experiments/data-v2-abl-000-y26m-b16-s42.yaml`（已完成）
 - `100 SR-CBAM`：`experiments/data-v2-abl-100-srcbam-b16-s42.yaml`（A1 已完成；未通过门控）
-- `A2 P3 ZR-CBAM`：`experiments/data-v2-abl-a2-p3-zrcbam-b16-s42.yaml`（待云端训练）
+- `A2 P3 ZR-CBAM`：`experiments/data-v2-abl-a2-p3-zrcbam-b16-s42.yaml`（已完成，best epoch 176；近似持平）
+- `B Dice`：B 分支 `experiments/data-v2-abl-010-dice-b16-s42.yaml`（已完成，best epoch 243；未通过门控）
 - 云端数据：`experiments/yolo_data_v2_cloud.yaml`
 - 默认数据根目录：`/root/yolo_data`
 
@@ -89,8 +105,8 @@ git pull --ff-only
 
 RTX 5090 和表 1 训练参数均已冻结。A1 正式结果见
 `experiment_records/runs/data-v2-abl-100-srcbam-b16-s42.md`；当前 A2 正式 Run ID 为
-`data-v2-abl-a2-p3-zrcbam-b16-s42`，完整 dry-run、预检、训练和回传命令见
-`实验步骤.md`。
+`data-v2-abl-a2-p3-zrcbam-b16-s42`，A2 训练命令保留在
+`实验步骤.md` 供查阅；已完成 Run 不复用同名启动。当前独立准备 C：P2Head，进展见 `PROGRESS.md`。
 
 入口会保留镜像自带的 PyTorch，并在缺少其他依赖时安装仓库内
 `ultralytics-main`。首次使用官方 `yolo26m-seg.pt` 时可能需要联网下载权重。
