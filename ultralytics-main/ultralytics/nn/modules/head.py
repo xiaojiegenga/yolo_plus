@@ -425,6 +425,42 @@ class Segment26(Segment):
             self.proto.fuse()
 
 
+class Segment26P2Lite(Segment26):
+    """Add lightweight P2 predictions while retaining the three-scale P3-based Proto26 path."""
+
+    def __init__(self, nc=80, nm=32, npr=256, reg_max=1, end2end=False, ch=()):
+        """Build baseline P3/P4/P5 predictors and prepend independently initialized P2 predictors."""
+        if len(ch) != 4:
+            raise ValueError("Segment26P2Lite requires channels ordered as P2, P3, P4, P5")
+        super().__init__(nc, nm, npr, reg_max, end2end, ch[1:])
+        p2 = Detect(nc, reg_max, end2end=False, ch=(ch[0],))
+        c4 = max(ch[0] // 4, nm)
+        mask = nn.Sequential(Conv(ch[0], c4, 3), Conv(c4, c4, 3), nn.Conv2d(c4, nm, 1))
+        for name, branch in (("cv2", p2.cv2[0]), ("cv3", p2.cv3[0]), ("cv4", mask)):
+            getattr(self, name).insert(0, branch)
+            if end2end:
+                getattr(self, f"one2one_{name}").insert(0, copy.deepcopy(branch))
+        self.nl = 4
+        self.stride = torch.zeros(self.nl)
+
+    def forward(self, x):
+        """Predict on four scales and form prototypes exclusively from P3/P4/P5."""
+        outputs = Detect.forward(self, x)
+        preds = outputs[1] if isinstance(outputs, tuple) else outputs
+        proto = self.proto(x[1:])
+        if isinstance(preds, dict):
+            if self.end2end:
+                preds["one2many"]["proto"] = proto
+                preds["one2one"]["proto"] = (
+                    tuple(p.detach() for p in proto) if isinstance(proto, tuple) else proto.detach()
+                )
+            else:
+                preds["proto"] = proto
+        if self.training:
+            return preds
+        return (outputs, proto) if self.export else ((outputs[0], proto), preds)
+
+
 class OBB(Detect):
     """YOLO OBB detection head for detection with rotation models.
 

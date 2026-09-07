@@ -66,6 +66,7 @@ from ultralytics.nn.modules import (
     SCDown,
     Segment,
     Segment26,
+    Segment26P2Lite,
     SemanticSegment,
     TorchVision,
     WorldDetect,
@@ -306,6 +307,23 @@ class BaseModel(torch.nn.Module):
         """
         model = weights["model"] if isinstance(weights, dict) else weights  # torchvision models are not dicts
         csd = model.float().state_dict()  # checkpoint state_dict as FP32
+        if isinstance(self.model[-1], Segment26P2Lite) and type(model.model[-1]) is Segment26:
+            # Layer 0-22 retain their semantics. The baseline head moves after the new P2 neck,
+            # and each P3/P4/P5 predictor moves from index 0/1/2 to 1/2/3.
+            source_prefix = f"model.{model.model[-1].i}."
+            target_prefix = f"model.{self.model[-1].i}."
+            branch_names = {"cv2", "cv3", "cv4", "one2one_cv2", "one2one_cv3", "one2one_cv4"}
+            remapped = {}
+            for key, value in csd.items():
+                if key.startswith(source_prefix):
+                    parts = key[len(source_prefix):].split(".")
+                    if parts[0] in branch_names:
+                        parts[1] = str(int(parts[1]) + 1)
+                    key = target_prefix + ".".join(parts)
+                remapped[key] = value
+            csd = remapped
+            if verbose:
+                LOGGER.info("P2Head transfer: baseline P3/P4/P5 -> branches 1/2/3; Proto retained; P2 initialized fresh")
         updated_csd = intersect_dicts(csd, self.state_dict())  # intersect
         self.load_state_dict(updated_csd, strict=False)  # load
         len_updated_csd = len(updated_csd)
@@ -1913,6 +1931,7 @@ def parse_model(d, ch, verbose=True):
                 YOLOEDetect,
                 Segment,
                 Segment26,
+                Segment26P2Lite,
                 YOLOESegment,
                 YOLOESegment26,
                 Pose,
@@ -1922,9 +1941,12 @@ def parse_model(d, ch, verbose=True):
             }
         ):
             args.extend([reg_max, end2end, [ch[x] for x in f]])
-            if m is Segment or m is YOLOESegment or m is Segment26 or m is YOLOESegment26:
+            if m in {Segment, YOLOESegment, Segment26, Segment26P2Lite, YOLOESegment26}:
                 args[2] = make_divisible(min(args[2], max_channels) * width, 8)
-            if m in {Detect, YOLOEDetect, Segment, Segment26, YOLOESegment, YOLOESegment26, Pose, Pose26, OBB, OBB26}:
+            if m in {
+                Detect, YOLOEDetect, Segment, Segment26, Segment26P2Lite,
+                YOLOESegment, YOLOESegment26, Pose, Pose26, OBB, OBB26,
+            }:
                 m.legacy = legacy
         elif m is SemanticSegment:
             args.append([ch[x] for x in f])  # nc, ch tuple

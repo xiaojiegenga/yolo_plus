@@ -155,12 +155,16 @@ def build_runtime(
     if run_path.exists():
         raise FileExistsError(f"Run 已存在，请更换 run-name：{run_path}")
 
-    pretrained = cli_args.pretrained
+    pretrained = cli_args.pretrained or config.get("pretrained")
+    if pretrained is not None and (not isinstance(pretrained, str) or not pretrained):
+        raise ValueError("pretrained 必须是非空字符串")
     if pretrained:
-        pretrained = str(resolve_existing_path(pretrained))
+        pretrained = resolve_model(pretrained)
 
     print(f"[CONFIG] {config_path}")
     print(f"[MODEL] {resolve_model(model)}")
+    if pretrained:
+        print(f"[PRETRAINED] {pretrained}")
     print(f"[OUTPUT] {run_path}")
     print("[TRAIN ARGS]")
     print(yaml.safe_dump(runtime, allow_unicode=True, sort_keys=False).rstrip())
@@ -177,8 +181,10 @@ def run_training(
     sys.path.insert(0, str(SOURCE_ROOT))
 
     from ultralytics import YOLO, __version__
+    from ultralytics.utils.torch_utils import init_seeds
 
     print(f"[ULTRALYTICS] {__version__}")
+    init_seeds(runtime.get("seed", 42), deterministic=runtime.get("deterministic", True))
     model = YOLO(model_source)
     if pretrained:
         model.load(pretrained)
