@@ -5,6 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 import importlib.util
+from types import SimpleNamespace
 
 import torch
 
@@ -12,7 +13,9 @@ from ultralytics.nn.modules import Segment26P2
 from ultralytics.nn.modules.block import Proto26P2
 from ultralytics.cfg import get_cfg
 from ultralytics.nn.tasks import SegmentationModel, load_checkpoint
+from ultralytics.models.yolo.segment import SegmentationValidator
 from ultralytics.utils import YAML
+from ultralytics.utils import ops
 
 
 MODEL_ROOT = Path(__file__).parents[1] / "ultralytics" / "cfg" / "models" / "26"
@@ -143,7 +146,7 @@ def test_p2proto_checkpoint_fusion_preserves_predictions():
 def test_p2proto_recipe_matches_baseline():
     root = MODEL_ROOT.parents[4]
     baseline = YAML.load(root / "experiments/data-v2-abl-000-y26m-b16-s42.yaml")
-    candidate = YAML.load(root / "experiments/data-v2-abl-d1-p2proto-b16-s42.yaml")
+    candidate = YAML.load(root / "experiments/data-v2-abl-d1-p2proto-r2-b16-s42.yaml")
     assert candidate["train"] == baseline["train"]
     assert candidate["data"] == baseline["data"]
     assert candidate["pretrained"] == baseline["model"]
@@ -169,3 +172,68 @@ def test_training_entry_seeds_new_prototype_parameters():
                 {"seed": 42, "deterministic": True, "project": "runs", "name": "d1-entry-check"},
             )
     torch.testing.assert_close(snapshots[0], snapshots[1], rtol=0, atol=0)
+
+
+def _validation_batch(height, width):
+    masks = torch.zeros(2, height // 2, width // 2)
+    masks[0, height // 8 : height // 4, width // 8 : width // 4] = 1
+    return {
+        "img": torch.zeros(2, 3, height, width, dtype=torch.uint8),
+        "batch_idx": torch.tensor([0.0]),
+        "cls": torch.tensor([[0.0]]),
+        "bboxes": torch.tensor([[0.375, 0.375, 0.25, 0.25]]),
+        "masks": masks,
+        "ori_shape": [(height, width)] * 2,
+        "ratio_pad": [((1.0, 1.0), (0, 0))] * 2,
+        "im_file": ["positive.jpg", "background.jpg"],
+    }
+
+
+def test_validator_mask_grid_and_box_crop_for_both_proto_strides():
+    with TemporaryDirectory() as directory:
+        validator = SegmentationValidator(save_dir=Path(directory), args={"plots": False, "conf": 0.25})
+        validator.device = torch.device("cpu")
+        validator.nc = 2
+        validator.end2end = True
+        for height, width in ((512, 672), (160, 128)):
+            batch = validator.preprocess(_validation_batch(height, width))
+            box = torch.tensor([[width / 4, height / 4, width / 2, height / 2]])
+            detections = torch.zeros(2, 1, 7)
+            detections[0, 0] = torch.cat((box[0], torch.tensor([0.9, 0.0, 1.0])))
+            for process in (ops.process_mask, ops.process_mask_native):
+                validator.process = process
+                for stride in (4, 2):
+                    proto = torch.ones(2, 1, height // stride, width // stride)
+                    predictions = validator.postprocess(((detections, proto), {}))
+                    prepared = validator._prepare_batch(0, batch)
+                    expected_shape = (height // 4, width // 4) if process is ops.process_mask else (height, width)
+                    assert predictions[0]["masks"].shape == (1, *expected_shape)
+                    assert predictions[1]["masks"].shape == (0, *expected_shape)
+                    assert torch.equal(predictions[0]["masks"].float(), prepared["masks"])
+                    assert validator._process_batch(predictions[0], prepared)["tp_m"].all()
+                    empty = validator._prepare_batch(1, batch)
+                    assert validator._process_batch(predictions[1], empty)["tp_m"].shape == (0, 10)
+                # The baseline's stride-4 masks match its original postprocessing exactly.
+                proto = torch.randn(2, 1, height // 4, width // 4)
+                actual = validator.postprocess(((detections, proto), {}))[0]["masks"]
+                expected = process(proto[0], torch.ones(1, 1), box, (height, width))
+                torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
+def test_p2proto_model_outputs_pass_validator_metrics():
+    model = _build_model("yolo26m-p2proto-seg.yaml").eval()
+    with TemporaryDirectory() as directory:
+        validator = SegmentationValidator(
+            save_dir=Path(directory), args={"plots": False, "conf": 1e-9, "max_det": 20}
+        )
+        validator.device = torch.device("cpu")
+        validator.data = {"val": "synthetic-val"}
+        validator.init_metrics(SimpleNamespace(names={0: "Rice leaffolder", 1: "Rice stemborers"}, end2end=True))
+        for height, width in ((128, 160), (160, 128)):
+            batch = validator.preprocess(_validation_batch(height, width))
+            with torch.no_grad():
+                outputs = model(batch["img"])
+            predictions = validator.postprocess(outputs)
+            assert predictions[0]["cls"].numel() > 0
+            validator.update_metrics(predictions, batch)
+        assert validator.seen == 4
