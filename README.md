@@ -7,7 +7,7 @@
 C 分支 `feature/data-v2-abl-c-p2head` 已完成 300 epoch 并核验，best epoch 282；本次轻量 P2Head 未通过门控。
 
 D1 训练分支为 `feature/data-v2-abl-d-p2proto`，只改变掩码原型分支，正式训练待运行。
-配置为 `experiments/data-v2-abl-d1-p2proto-b16-s42.yaml`，云端步骤见 [实验步骤](实验步骤.md)。
+配置为 `experiments/data-v2-abl-d1-p2proto-r2-b16-s42.yaml`，云端步骤见 [实验步骤](实验步骤.md)。
 
 ## 工作模式
 

@@ -3,7 +3,7 @@
 本目录保存由本地电脑维护并提交 GitHub 的实验参数。云服务器只拉取已提交的 YAML，
 不在云端临时改参数。
 
-- `data-v2-abl-d1-p2proto-b16-s42.yaml`：D1 独立候选，P2 细节注入的 stride-2 原型；正式训练待运行。
+- `data-v2-abl-d1-p2proto-r2-b16-s42.yaml`：D1 独立候选，P2 细节注入的 stride-2 原型；正式训练待运行。
 - `data-v2-abl-000-y26m-b16-s42.yaml`：data-v2 源码消融阶段 0 的正式 YOLO26m-seg
   Baseline 配置；不包含 Attention、Dice 或 P2Head 改动。
 - `data-v2-abl-100-srcbam-b16-s42.yaml`：正式消融 A 配置；只在 Backbone P3/P4 使用
