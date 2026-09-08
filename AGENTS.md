@@ -13,7 +13,9 @@
 
 ## 固定研究信息
 
-- 仓库：`xiaojiegenga/yolo_plus`，当前开发分支 `cloud/data-v2-5090`。
+- 仓库：`xiaojiegenga/yolo_plus`；正式 Baseline 分支 `cloud/data-v2-5090`，总体分析分支
+  `feature/data-v2-abl-a-attention`，同时保留改进 A 源码。B 的独立源码与配置保存在
+  `feature/data-v2-abl-b-dice`；C 的独立实现保存在 `feature/data-v2-abl-c-p2head`；D 的独立实现保存在 `feature/data-v2-abl-d-p2proto`；A、B、C、D 的知识文档、结果与阶段总结统一在总体分析分支维护。
 - 任务：无人机航拍水稻害虫实例分割。
 - 数据集：`rice-pest-data-v2`。
 - 类别：`Rice leaffolder`、`Rice stemborers`。
