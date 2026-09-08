@@ -2012,6 +2012,54 @@ class Proto26(Proto):
         self.semseg = None
 
 
+class Proto26P2(Proto26):
+    """YOLO26 mask Proto module with a narrow stride-2 refinement stage fed by P2/4.
+
+    Multi-scale fusion stays on P3/8 exactly as in Proto26, so its weights transfer from the official
+    checkpoint unchanged. The stride-4 feature map is then refined by adding a projection of the P2/4
+    backbone feature and upsampled once more, moving the prototype output from stride 4 to stride 2.
+    Channel width is narrowed before the high-resolution stage to keep the added cost small.
+
+    Attributes:
+        p2_proj (Conv): Projects the P2/4 feature to the fusion width.
+        hi_up (nn.ConvTranspose2d): Narrowing upsample from stride 4 to stride 2.
+        hi_cv (Conv): Refinement convolution at stride 2.
+    """
+
+    def __init__(self, ch: tuple = (), c_: int = 256, c2: int = 32, nc: int = 80, narrow: int = 4):
+        """Initialize the P2-refined proto module.
+
+        Args:
+            ch (tuple): Channel sizes ordered as (P2, P3, P4, P5).
+            c_ (int): Intermediate channels of the stride-4 stage.
+            c2 (int): Output channels (number of protos).
+            nc (int): Number of classes for semantic segmentation.
+            narrow (int): Channel reduction factor applied before the stride-2 stage.
+        """
+        super().__init__(ch[1:], c_, c2, nc)
+        c_hi = max(c_ // narrow, c2)
+        self.p2_proj = Conv(ch[0], c_, k=1)
+        self.hi_up = nn.ConvTranspose2d(c_, c_hi, 2, 2, 0, bias=True)
+        self.hi_cv = Conv(c_hi, c_hi, k=3)
+        self.cv3 = Conv(c_hi, c2)  # output moved to the stride-2 stage
+
+    def forward(self, x: torch.Tensor, return_semantic: bool = True) -> torch.Tensor:
+        """Fuse P3/P4/P5 at stride 4, inject P2 detail, then emit prototypes at stride 2."""
+        p2, feats = x[0], x[1:]
+        feat = feats[0]
+        for i, f in enumerate(self.feat_refine):
+            up_feat = f(feats[i + 1])
+            up_feat = F.interpolate(up_feat, size=feat.shape[2:], mode="nearest")
+            feat = feat + up_feat
+        mid = self.cv2(self.upsample(self.cv1(self.feat_fuse(feat))))
+        mid = mid + self.p2_proj(p2)
+        p = self.cv3(self.hi_cv(self.hi_up(mid)))
+        if self.training and return_semantic:
+            semantic = self.semseg(feat)
+            return (p, semantic)
+        return p
+
+
 class RealNVP(nn.Module):
     """RealNVP: a flow-based generative model.
 
