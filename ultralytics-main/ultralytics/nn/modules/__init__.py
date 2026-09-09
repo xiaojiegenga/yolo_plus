@@ -76,6 +76,7 @@ from .conv import (
     RepConv,
     SpatialAttention,
 )
+from .dysample import DySample
 from .head import (
     OBB,
     OBB26,
@@ -150,6 +151,7 @@ __all__ = (
     "ConvTranspose",
     "DWConv",
     "DWConvTranspose2d",
+    "DySample",
     "DeformableTransformerDecoder",
     "DeformableTransformerDecoderLayer",
     "Detect",
