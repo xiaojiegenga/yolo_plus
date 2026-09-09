@@ -196,10 +196,11 @@ Run ID：`data-v2-tune-mr2-nomix-e300-b16-s42`，相对当前最优 P1 `data-v2-
 ## 下一步
 
 1. 000、A1、A2、B、C、D1 六组正式结果均已登记；D1 保留为当前优先候选，A1/B/C 未通过门控，A2 暂不组合。
-2. 先讨论 D1 的掩码收益与新增误检；优先核对含虫图错误类型，再确定下一项独立设计。
-3. 不自动启动组合或重复训练；重新设计任一模块须使用新 Run ID。
-4. 本机本次分析使用 `D:/tool/Anaconda3/envs/yolo26/python.exe`；D checkpoint 使用独立 D checkout 源码读取。
-5. Val 用于选方案；Test 保留到最终模型与阈值冻结后统一评估。
+2. 用户已确定论文目标为两个有效的结构改进；保留 D1，下一项独立实现 E：Neck 两处 DySample 上采样。
+3. 固定数据集与训练配方，直接开展结构消融；先验证 E，再决定 D1+E，不以数据集排查为前置条件。
+4. 不自动启动组合或重复训练；重新设计任一模块须使用新 Run ID。
+5. 本机本次分析使用 `D:/tool/Anaconda3/envs/yolo26/python.exe`；D checkpoint 使用独立 D checkout 源码读取。
+6. Val 用于选方案；Test 保留到最终模型与阈值冻结后统一评估。
 
 ## Git 与本地文件状态
 

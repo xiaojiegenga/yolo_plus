@@ -3,6 +3,7 @@
 本目录保存由本地电脑维护并提交 GitHub 的实验参数。云服务器只拉取已提交的 YAML，
 不在云端临时改参数。
 
+- `data-v2-abl-d1-p2proto-r2-b16-s42.yaml`：D1 独立候选，P2 细节注入的 stride-2 原型；已完成 300 epoch，主指标 0.37327，保留候选。
 - `data-v2-abl-000-y26m-b16-s42.yaml`：data-v2 源码消融阶段 0 的正式 YOLO26m-seg
   Baseline 配置；不包含 Attention、Dice 或 P2Head 改动。
 - `data-v2-abl-100-srcbam-b16-s42.yaml`：正式消融 A 配置；只在 Backbone P3/P4 使用
@@ -17,7 +18,7 @@
 
 正式消融统一继承 `data-v2-abl-000-y26m-b16-s42.yaml` 的训练配方，后续模块实验只能
 改变对应源码结构或损失因素，并使用新的 Run ID。000、A1、A2、B、C 均已完成并登记；A1/B/C 未通过门控，A2 暂不组合。
-根目录 `实验步骤.md` 保留 C 操作参考，已有 Run ID 不重复运行。
+根目录 `实验步骤.md` 为 D1 云端操作入口，已有 Run ID 不重复运行。
 
 训练入口的字段映射固定为：
 

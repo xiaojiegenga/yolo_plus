@@ -181,8 +181,10 @@ def run_training(
     sys.path.insert(0, str(SOURCE_ROOT))
 
     from ultralytics import YOLO, __version__
+    from ultralytics.utils.torch_utils import init_seeds
 
     print(f"[ULTRALYTICS] {__version__}")
+    init_seeds(runtime.get("seed", 0), deterministic=runtime.get("deterministic", True))
     model = YOLO(model_source)
     if pretrained:
         model.load(pretrained)

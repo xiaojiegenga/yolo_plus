@@ -58,6 +58,7 @@ class SegmentationValidator(DetectionValidator):
             (dict[str, Any]): Preprocessed batch.
         """
         batch = super().preprocess(batch)
+        self.batch_imgsz = batch["img"].shape[2:]
         batch["masks"] = batch["masks"].float()
         return batch
 
@@ -100,7 +101,12 @@ class SegmentationValidator(DetectionValidator):
         """
         proto = preds[0][1] if isinstance(preds[0], tuple) else preds[1]
         preds = super().postprocess(preds[0])
-        imgsz = [4 * x for x in proto.shape[2:]]  # get image size from proto
+        imgsz = self.batch_imgsz
+        if self.process is ops.process_mask:
+            # Match the frozen stride-4 GT evaluation grid for every prototype architecture.
+            mask_size = tuple(s // 4 for s in imgsz)
+            if proto.shape[2:] != mask_size:
+                proto = F.interpolate(proto.float(), mask_size, mode="bilinear", align_corners=False)
         for i, pred in enumerate(preds):
             coefficient = pred.pop("extra")
             pred["masks"] = (

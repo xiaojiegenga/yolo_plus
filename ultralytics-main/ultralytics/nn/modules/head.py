@@ -15,7 +15,18 @@ from ultralytics.utils import NOT_MACOS14
 from ultralytics.utils.tal import dist2bbox, dist2rbox, make_anchors
 from ultralytics.utils.torch_utils import TORCH_1_11, fuse_conv_and_bn, smart_inference_mode
 
-from .block import DFL, SAVPE, BNContrastiveHead, ContrastiveHead, Proto, Proto26, RealNVP, Residual, SwiGLUFFN
+from .block import (
+    DFL,
+    SAVPE,
+    BNContrastiveHead,
+    ContrastiveHead,
+    Proto,
+    Proto26,
+    Proto26P2,
+    RealNVP,
+    Residual,
+    SwiGLUFFN,
+)
 from .conv import Conv, DWConv
 from .transformer import MLP, DeformableTransformerDecoder, DeformableTransformerDecoderLayer
 from .utils import bias_init_with_prob, linear_init
@@ -423,6 +434,56 @@ class Segment26(Segment):
         super().fuse()
         if hasattr(self.proto, "fuse"):
             self.proto.fuse()
+
+
+class Segment26P2(Segment26):
+    """YOLO26 Segment head whose mask prototypes are built on the P2/4 feature map.
+
+    Detection keeps the baseline P3/P4/P5 pyramid; only the prototype branch changes. Proto26P2 keeps the
+    multi-scale fusion on P3/8, then injects the P2/4 feature and upsamples once more, so prototypes are
+    emitted at stride 2 instead of stride 4.
+
+    Attributes:
+        proto (Proto26P2): Prototype generation module with a stride-2 output refined by P2/4.
+
+    Examples:
+        Create a P2-prototype segmentation head
+        >>> segment = Segment26P2(nc=80, nm=32, npr=256, ch=(256, 256, 512, 512))
+        >>> x = [torch.randn(1, 256, 160, 160), torch.randn(1, 256, 80, 80)]
+        >>> x += [torch.randn(1, 512, 40, 40), torch.randn(1, 512, 20, 20)]
+        >>> outputs = segment(x)
+    """
+
+    def __init__(self, nc: int = 80, nm: int = 32, npr: int = 256, reg_max=16, end2end=False, ch: tuple = ()):
+        """Initialize the head with P2 routed to the prototype branch only.
+
+        Args:
+            nc (int): Number of classes.
+            nm (int): Number of masks.
+            npr (int): Number of protos.
+            reg_max (int): Maximum number of DFL channels.
+            end2end (bool): Whether to use end-to-end NMS-free detection.
+            ch (tuple): Channel sizes ordered as (P2, P3, P4, P5).
+        """
+        super().__init__(nc, nm, npr, reg_max, end2end, ch[1:])
+        self.proto = Proto26P2(ch, self.npr, self.nm, nc)  # protos refined to stride 2 using P2
+
+    def forward(self, x: list[torch.Tensor]) -> tuple | list[torch.Tensor] | dict[str, torch.Tensor]:
+        """Return model outputs and mask coefficients, detecting on P3/P4/P5 and pooling protos from P2."""
+        outputs = Detect.forward(self, x[1:])
+        preds = outputs[1] if isinstance(outputs, tuple) else outputs
+        proto = self.proto(x)  # mask protos
+        if isinstance(preds, dict):  # training and validating during training
+            if self.end2end:
+                preds["one2many"]["proto"] = proto
+                preds["one2one"]["proto"] = (
+                    tuple(p.detach() for p in proto) if isinstance(proto, tuple) else proto.detach()
+                )
+            else:
+                preds["proto"] = proto
+        if self.training:
+            return preds
+        return (outputs, proto) if self.export else ((outputs[0], proto), preds)
 
 
 class OBB(Detect):
