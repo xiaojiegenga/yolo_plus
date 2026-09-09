@@ -3,6 +3,18 @@
 > 用途：在不同模型 / 会话之间切换时，快速了解项目当前进展。这里只放**已完成的关键步骤**和**运行结果**；固定规则与架构见 `CLAUDE.md` 与 `AGENTS.md`，实验方案细节见 `云服务器实验设计与记录表.md`。
 > 最后更新：2026-09-09
 
+## 改进 E 当前状态
+
+- 当前开发分支 `feature/data-v2-abl-e-dysample`，从正式 Baseline `c0f4f35` 创建；实现提交 `5d91a2b`。
+- D1 结果及当前源码快照已在总体分析分支提交并推送，保存点 `631a932`；实际 D1 训练提交仍为 `7d277b6`。
+- E 仅替换 Neck 第 11、14 层上采样；DySample LP、scale=2、groups=4、偏移系数 0.25；检测与标准 Proto 保持 Baseline。
+- 配置 `experiments/data-v2-abl-e-dysample-b16-s42.yaml`，正式 Run `data-v2-abl-e-dysample-b16-s42` 待运行；全部 train 参数与 000 相同。
+- 7 项 CPU 聚焦测试、官方权重迁移、CUDA AMP 损失反向与 FP16 推理通过；FP32 输出及梯度与官方 LP 实现一致。
+- Fused Params=23,541,842（+32,832，约 +0.14%）；THOP=121.228493 GFLOPs，未计 grid_sample 等函数算子。
+- 当前本机 CUDA 采样反向不保证逐位复现；deterministic=true 维持冻结，框架警告模式不阻止训练。
+- 初学者说明：[E 动态上采样](knowledge/改进E-DySample动态上采样原理与实现.md)；当前主线：[D1/E 两结构消融](experiment_records/data-v2-de-ablation-plan.md)；操作见 `实验步骤.md`。
+- 用户固定数据集和训练配方，直接验证结构；E 结果回传后再决定 D1+E。
+
 ## 改进 D1 当前状态
 
 - 正式 Run `data-v2-abl-d1-p2proto-r2-b16-s42` 已完成全部 300 epoch 并回传，实际训练 commit `7d277b6`，best epoch 278。
@@ -196,7 +208,7 @@ Run ID：`data-v2-tune-mr2-nomix-e300-b16-s42`，相对当前最优 P1 `data-v2-
 ## 下一步
 
 1. 000、A1、A2、B、C、D1 六组正式结果均已登记；D1 保留为当前优先候选，A1/B/C 未通过门控，A2 暂不组合。
-2. 用户已确定论文目标为两个有效的结构改进；保留 D1，下一项独立实现 E：Neck 两处 DySample 上采样。
+2. E 源码和本地检查已完成；云端按 `实验步骤.md` 检查后，由用户手动训练并回传。
 3. 固定数据集与训练配方，直接开展结构消融；先验证 E，再决定 D1+E，不以数据集排查为前置条件。
 4. 不自动启动组合或重复训练；重新设计任一模块须使用新 Run ID。
 5. 本机本次分析使用 `D:/tool/Anaconda3/envs/yolo26/python.exe`；D checkpoint 使用独立 D checkout 源码读取。
@@ -204,7 +216,7 @@ Run ID：`data-v2-tune-mr2-nomix-e300-b16-s42`，相对当前最优 P1 `data-v2-
 
 ## Git 与本地文件状态
 
-- 当前 Git 根目录：`E:\Study\claude_yolo_plus`；当前总体分析分支为 `feature/data-v2-abl-a-attention`，A2 实现提交为 `a38aabf`。
+- 当前 Git 根目录：`E:\Study\claude_yolo_plus`；总体分析分支为 `feature/data-v2-abl-a-attention`，当前开发分支为 `feature/data-v2-abl-e-dysample`，A2 实现提交为 `a38aabf`。
 - 正式 Baseline 分支为 `cloud/data-v2-5090`，记录提交为 `c0f4f35`；A1 源码为 `9d0c479`、结果记录为 `ac11686`；A2 实现为 `a38aabf`。
 - B 本地分支 `feature/data-v2-abl-b-dice` 跟踪同名远端分支，当前为 `cef6b0b`，源码提交为 `1d1a71e`。B 从 `c0f4f35` 独立分叉，不含注意力改动。
 - `feature/data-v2-abl-a-attention` 为总体分析分支，统一维护 A、B、C 知识文档、实验记录与阶段总结；B 配置与损失源码仍由 B 分支维护。

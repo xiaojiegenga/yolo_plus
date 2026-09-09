@@ -15,7 +15,7 @@
 
 - 仓库：`xiaojiegenga/yolo_plus`；正式 Baseline 分支 `cloud/data-v2-5090`，总体分析分支
   `feature/data-v2-abl-a-attention`，同时保留改进 A 源码。B 的独立源码与配置保存在
-  `feature/data-v2-abl-b-dice`；C 的独立实现保存在 `feature/data-v2-abl-c-p2head`；D 的独立实现保存在 `feature/data-v2-abl-d-p2proto`；A、B、C、D 的知识文档、结果与阶段总结统一在总体分析分支维护。
+  `feature/data-v2-abl-b-dice`；C 的独立实现保存在 `feature/data-v2-abl-c-p2head`；D 的独立实现保存在 `feature/data-v2-abl-d-p2proto`；E 的独立实现保存在 `feature/data-v2-abl-e-dysample`；知识文档、结果与阶段总结在总体分析分支维护，各实现分支保留相关说明。
 - 任务：无人机航拍水稻害虫实例分割。
 - 数据集：`rice-pest-data-v2`。
 - 类别：`Rice leaffolder`、`Rice stemborers`。
@@ -24,6 +24,11 @@
 - 主指标：Val Mask mAP50-95。
 - Val 用于选方案；Test 在方案冻结后统一评估。
 - 正式训练 GPU：RTX 5090（已确定）。
+
+## 当前两结构主线
+
+保留 D1，独立验证 E：Neck DySample，结果返回后再决定 D1+E。固定数据集和训练配方，
+数据集排查不作为结构实验前置步骤。当前矩阵见 `experiment_records/data-v2-de-ablation-plan.md`。
 
 ## 本地、GitHub 与云端职责
 
