@@ -5,20 +5,19 @@
 
 ## 改进 E 当前状态
 
-- 当前开发分支 `feature/data-v2-abl-e-dysample`，从正式 Baseline `c0f4f35` 创建；实现提交 `5d91a2b`。
-- D1 结果及当前源码快照已在总体分析分支提交并推送，保存点 `631a932`；实际 D1 训练提交仍为 `7d277b6`。
-- E 仅替换 Neck 第 11、14 层上采样；DySample LP、scale=2、groups=4、偏移系数 0.25；检测与标准 Proto 保持 Baseline。
-- 配置 `experiments/data-v2-abl-e-dysample-b16-s42.yaml`，正式 Run `data-v2-abl-e-dysample-b16-s42` 待运行；全部 train 参数与 000 相同。
-- 7 项 CPU 聚焦测试、官方权重迁移、CUDA AMP 损失反向与 FP16 推理通过；FP32 输出及梯度与官方 LP 实现一致。
-- Fused Params=23,541,842（+32,832，约 +0.14%）；THOP=121.228493 GFLOPs，未计 grid_sample 等函数算子。
-- 当前本机 CUDA 采样反向不保证逐位复现；deterministic=true 维持冻结，框架警告模式不阻止训练。
-- 初学者说明：[E 动态上采样](knowledge/改进E-DySample动态上采样原理与实现.md)；当前主线：[D1/E 两结构消融](experiment_records/data-v2-de-ablation-plan.md)；操作见 `实验步骤.md`。
-- 用户固定数据集和训练配方，直接验证结构；E 结果回传后再决定 D1+E。
+- 正式 Run `data-v2-abl-e-dysample-b16-s42` 已完成 300 epoch 并回传，best epoch 264，official fitness=0.80522。
+- Mask mAP50 / mAP50-95=0.69353 / 0.34649，较 000 -0.01779 / -0.01699；本次 E 未通过门控，不进入 D1+E。
+- 卷叶螟 / 钻心虫日志 Mask AP50-95=0.248 / 0.446，均低于 Baseline；top-10 fitness 均值 0.796374，低于 Baseline 0.804628。
+- best/last 的指标与 CSV 一致，全部权重有限；第 2 轮部分 Val loss NaN，训练损失与 P/R/mAP 均有限。
+- 正式训练 4473.95 s（1.243 h），峰值 GPU_mem=15.4 GB；fused Params=23,541,842，THOP 121.228493 GFLOPs 未计 grid_sample。
+- 实际参数与冻结配方一致；实现提交 5d91a2b，回传日志未记录实际训练 commit。DySample CUDA 反向不保证逐位复现。
+- [正式结果](experiment_records/runs/data-v2-abl-e-dysample-b16-s42.md)、comparison.csv 和实验总表已登记；总体分析位于 A 分支，E 独立源码保留在 `feature/data-v2-abl-e-dysample`。
+- 保留 D1，继续寻找第二个有效结构；固定数据集与训练配方，不以数据集排查为前置条件。
 
 ## 改进 D1 当前状态
 
 - 正式 Run `data-v2-abl-d1-p2proto-r2-b16-s42` 已完成全部 300 epoch 并回传，实际训练 commit `7d277b6`，best epoch 278。
-- 正式 Mask mAP50 / mAP50-95 为 0.71245 / 0.37327，较 000 +0.00113 / +0.00979；当前六组单模块比较中主指标最高，保留候选。
+- 正式 Mask mAP50 / mAP50-95 为 0.71245 / 0.37327，较 000 +0.00113 / +0.00979；当前已完成方案中主指标最高，保留候选。
 - 卷叶螟日志 Mask mAP50-95 为 0.290（000 为 0.266），钻心虫为 0.458（000 为 0.461）。
 - 原图配对 Mask mAP50-95 从 0.34205 升到 0.34814；174 个小卷叶螟 AP50-95 从 0.19311 升到 0.20073，固定阈值 TP 107→118、FP 123→165。
 - best/last 元数据与 CSV 一致、全部权重张量有限；epoch 3、4、76、186 有部分 Val loss NaN，根因未定位，训练损失与 P/R/mAP 均有限。
@@ -207,16 +206,16 @@ Run ID：`data-v2-tune-mr2-nomix-e300-b16-s42`，相对当前最优 P1 `data-v2-
 
 ## 下一步
 
-1. 000、A1、A2、B、C、D1 六组正式结果均已登记；D1 保留为当前优先候选，A1/B/C 未通过门控，A2 暂不组合。
-2. E 源码和本地检查已完成；云端按 `实验步骤.md` 检查后，由用户手动训练并回传。
-3. 固定数据集与训练配方，直接开展结构消融；先验证 E，再决定 D1+E，不以数据集排查为前置条件。
+1. 000、A1、A2、B、C、D1、E 七组正式结果均已登记；D1 保留为当前优先候选，A1/B/C 未通过门控，A2 暂不组合。
+2. E 已完成正式分析，当前不组合；下一项结构设计待讨论。
+3. 固定数据集与训练配方，直接开展结构消融；E 未通过门控，继续寻找第二个结构，不以数据集排查为前置条件。
 4. 不自动启动组合或重复训练；重新设计任一模块须使用新 Run ID。
 5. 本机本次分析使用 `D:/tool/Anaconda3/envs/yolo26/python.exe`；D checkpoint 使用独立 D checkout 源码读取。
 6. Val 用于选方案；Test 保留到最终模型与阈值冻结后统一评估。
 
 ## Git 与本地文件状态
 
-- 当前 Git 根目录：`E:\Study\claude_yolo_plus`；总体分析分支为 `feature/data-v2-abl-a-attention`，当前开发分支为 `feature/data-v2-abl-e-dysample`，A2 实现提交为 `a38aabf`。
+- 当前 Git 根目录：`E:\Study\claude_yolo_plus`；总体分析分支为 `feature/data-v2-abl-a-attention`，当前工作区为总体分析分支，E 独立源码分支为 `feature/data-v2-abl-e-dysample`，A2 实现提交为 `a38aabf`。
 - 正式 Baseline 分支为 `cloud/data-v2-5090`，记录提交为 `c0f4f35`；A1 源码为 `9d0c479`、结果记录为 `ac11686`；A2 实现为 `a38aabf`。
 - B 本地分支 `feature/data-v2-abl-b-dice` 跟踪同名远端分支，当前为 `cef6b0b`，源码提交为 `1d1a71e`。B 从 `c0f4f35` 独立分叉，不含注意力改动。
 - `feature/data-v2-abl-a-attention` 为总体分析分支，统一维护 A、B、C 知识文档、实验记录与阶段总结；B 配置与损失源码仍由 B 分支维护。
@@ -231,6 +230,6 @@ Run ID：`data-v2-tune-mr2-nomix-e300-b16-s42`，相对当前最优 P1 `data-v2-
 - 消融实验单变量原则：batch 统一为 16（含尺度对比的 l 模型与源码改动实验），不因 32GB 显存改用 batch=32
 - 参数优化 Run 只写 `parameter_tuning/` 并填总表表 2，不进入 `comparison.csv`
 - 只有参数冻结后、可用于期刊对比的正式 Run 才进入 `comparison.csv`
-- A1、本次 B/C 已淘汰；A2 近似持平，暂不进入组合；六组正式结果均已登记；D1 保留正向候选
+- A1、本次 B/C 已淘汰；A2 近似持平，暂不进入组合；七组正式结果均已登记；E 未通过门控；D1 保留正向候选
 - 未经用户要求不启动下一轮长时间训练
 - 不覆盖已有 Run / 权重 / 记录；任何参数、代码或数据口径变化换新 Run ID
