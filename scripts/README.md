@@ -1,5 +1,6 @@
 # scripts
 
+- `check_dysample.py`：E 的 7 项 CPU 检查及官方权重迁移；`--cuda` 增加 GPU AMP 反向与 FP16 推理检查。
 - `cloud_train_data_v2.py`：云服务器入口；保留镜像自带的 CUDA PyTorch，只在缺依赖时安装仓库内 Ultralytics。
 - `train_yolo26_seg.py`：读取实验 YAML 并启动训练。
 - `transfer_run.py`：云端打包完整 Run，本地解包回 `runs/`。
