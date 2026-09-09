@@ -6,6 +6,9 @@
 独立 B 分支 `feature/data-v2-abl-b-dice` 的完整 Run 已回传并核验，本次 Dice 未通过门控。
 C 分支 `feature/data-v2-abl-c-p2head` 已完成 300 epoch 并核验，best epoch 282；本次轻量 P2Head 未通过门控。
 
+D1 训练分支为 `feature/data-v2-abl-d-p2proto`，已完成 300 epoch；Mask mAP50-95=0.37327，较 000 +0.00979，保留候选。详见 [D1 正式分析](experiment_records/runs/data-v2-abl-d1-p2proto-r2-b16-s42.md)。
+配置为 `experiments/data-v2-abl-d1-p2proto-r2-b16-s42.yaml`，云端步骤见 [实验步骤](实验步骤.md)。
+
 ## 工作模式
 
 ```text
@@ -91,25 +94,15 @@ $env:PYTHONUTF8 = '1'
 └─ labels/test
 ```
 
-首次拉取当前改进 C 训练代码时使用：
+首次拉取 D1 训练代码：
 
 ```bash
-git clone --branch feature/data-v2-abl-c-p2head https://github.com/xiaojiegenga/yolo_plus.git yolo_plus
+git clone --branch feature/data-v2-abl-d-p2proto https://github.com/xiaojiegenga/yolo_plus.git yolo_plus
 cd yolo_plus
 ```
 
-已有仓库切换到 C 分支（首次创建本地跟踪）：
-
-```bash
-git fetch origin
-git switch --track origin/feature/data-v2-abl-c-p2head
-git pull --ff-only
-```
-
-RTX 5090 和表 1 训练参数均已冻结。当前 C 正式 Run ID 为
-`data-v2-abl-001-p2head-b16-s42`，已完成并登记；以下为操作参考，同名 Run 不重复运行。检查、手动训练和回传流程见
-[实验步骤](实验步骤.md)，设计见 [C 知识文档](knowledge/改进C-P2Head小目标分支原理与实现.md)。
-本地结果分析统一切回 `feature/data-v2-abl-a-attention`。
+已有仓库使用 `git fetch origin`、`git switch feature/data-v2-abl-d-p2proto`、`git pull --ff-only`。
+按 [实验步骤](实验步骤.md) 检查结构、执行预检并手动启动正式训练。
 
 入口会保留镜像自带的 PyTorch，并在缺少其他依赖时安装仓库内
 `ultralytics-main`。首次使用官方 `yolo26m-seg.pt` 时可能需要联网下载权重。

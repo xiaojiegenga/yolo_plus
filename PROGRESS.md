@@ -1,9 +1,21 @@
 # 项目进展记录
 
 > 用途：在不同模型 / 会话之间切换时，快速了解项目当前进展。这里只放**已完成的关键步骤**和**运行结果**；固定规则与架构见 `CLAUDE.md` 与 `AGENTS.md`，实验方案细节见 `云服务器实验设计与记录表.md`。
-> 最后更新：2026-09-08
+> 最后更新：2026-09-09
 
-## 当前状态（一句话）
+## 改进 D1 当前状态
+
+- 正式 Run `data-v2-abl-d1-p2proto-r2-b16-s42` 已完成全部 300 epoch 并回传，实际训练 commit `7d277b6`，best epoch 278。
+- 正式 Mask mAP50 / mAP50-95 为 0.71245 / 0.37327，较 000 +0.00113 / +0.00979；当前六组单模块比较中主指标最高，保留候选。
+- 卷叶螟日志 Mask mAP50-95 为 0.290（000 为 0.266），钻心虫为 0.458（000 为 0.461）。
+- 原图配对 Mask mAP50-95 从 0.34205 升到 0.34814；174 个小卷叶螟 AP50-95 从 0.19311 升到 0.20073，固定阈值 TP 107→118、FP 123→165。
+- best/last 元数据与 CSV 一致、全部权重张量有限；epoch 3、4、76、186 有部分 Val loss NaN，根因未定位，训练损失与 P/R/mAP 均有限。
+- 训练耗时 4121.99 s（1.145 h），日志峰值 GPU_mem=15.7 GB；fused Params=23,671,186，GFLOPs@640=135.431782。
+- 独立源码位于 `feature/data-v2-abl-d-p2proto`；检测 stride=8/16/32，原型 stride=2；默认正式 Val 保持 stride-4 网格。
+- [正式分析](experiment_records/runs/data-v2-abl-d1-p2proto-r2-b16-s42.md)、[原图及小目标评估](experiment_records/evaluations/data-v2-d1-val.md)、comparison.csv 和实验总表已登记。
+- 保留原首轮 Val 中止 Run `data-v2-abl-d1-p2proto-b16-s42`；不计入正式结果。
+
+## 已完成实验状态
 
 RTX 5090 与 data-v2 正式训练参数均已冻结。A2 已完成并回传，epoch 276 正常早停，
 best epoch 176；相对 `000` 的 Mask mAP50 / mAP50-95 为 +0.00374 / -0.00239，
@@ -183,15 +195,15 @@ Run ID：`data-v2-tune-mr2-nomix-e300-b16-s42`，相对当前最优 P1 `data-v2-
 
 ## 下一步
 
-1. 000、A1、A2、B、C 五组正式结果均已登记；A1/B/C 未通过门控，A2 近似持平，当前均不进入组合。
-2. 保留完整 Run 和原始负结果；先依据已完成的单模块证据提出下一项独立假设。
+1. 000、A1、A2、B、C、D1 六组正式结果均已登记；D1 保留为当前优先候选，A1/B/C 未通过门控，A2 暂不组合。
+2. 先讨论 D1 的掩码收益与新增误检；优先核对含虫图错误类型，再确定下一项独立设计。
 3. 不自动启动组合或重复训练；重新设计任一模块须使用新 Run ID。
-4. 本机通过 `.venv/Scripts/python.exe` 开发和分析；环境入口见 `LOCAL_SETUP.local.md`。
+4. 本机本次分析使用 `D:/tool/Anaconda3/envs/yolo26/python.exe`；D checkpoint 使用独立 D checkout 源码读取。
 5. Val 用于选方案；Test 保留到最终模型与阈值冻结后统一评估。
 
 ## Git 与本地文件状态
 
-- 当前 Git 根目录：`E:\Study\论文撰写\yolo_plus`；当前总体分析分支为 `feature/data-v2-abl-a-attention`，A2 实现提交为 `a38aabf`。
+- 当前 Git 根目录：`E:\Study\claude_yolo_plus`；当前总体分析分支为 `feature/data-v2-abl-a-attention`，A2 实现提交为 `a38aabf`。
 - 正式 Baseline 分支为 `cloud/data-v2-5090`，记录提交为 `c0f4f35`；A1 源码为 `9d0c479`、结果记录为 `ac11686`；A2 实现为 `a38aabf`。
 - B 本地分支 `feature/data-v2-abl-b-dice` 跟踪同名远端分支，当前为 `cef6b0b`，源码提交为 `1d1a71e`。B 从 `c0f4f35` 独立分叉，不含注意力改动。
 - `feature/data-v2-abl-a-attention` 为总体分析分支，统一维护 A、B、C 知识文档、实验记录与阶段总结；B 配置与损失源码仍由 B 分支维护。
@@ -206,6 +218,6 @@ Run ID：`data-v2-tune-mr2-nomix-e300-b16-s42`，相对当前最优 P1 `data-v2-
 - 消融实验单变量原则：batch 统一为 16（含尺度对比的 l 模型与源码改动实验），不因 32GB 显存改用 batch=32
 - 参数优化 Run 只写 `parameter_tuning/` 并填总表表 2，不进入 `comparison.csv`
 - 只有参数冻结后、可用于期刊对比的正式 Run 才进入 `comparison.csv`
-- A1、本次 B/C 已淘汰；A2 近似持平，暂不进入组合；五组正式结果均已登记
+- A1、本次 B/C 已淘汰；A2 近似持平，暂不进入组合；六组正式结果均已登记；D1 保留正向候选
 - 未经用户要求不启动下一轮长时间训练
 - 不覆盖已有 Run / 权重 / 记录；任何参数、代码或数据口径变化换新 Run ID

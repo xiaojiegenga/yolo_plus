@@ -1,7 +1,8 @@
-"""Compare Baseline and C on Val using bbox area after letterboxing to 640 to define small objects.
+"""Compare Baseline and a candidate on Val using bbox area at 640 to define small objects.
 
 This separate COCO-style evaluation does not replace the training CSV metrics.
-Run with the C implementation on the import path via --source-root.
+Defaults to C; use --candidate-run and --candidate-label for another candidate.
+Run with the candidate implementation on the import path via --source-root.
 """
 
 from __future__ import annotations
@@ -18,12 +19,26 @@ ROOT = Path(__file__).resolve().parents[1]
 RUNS = {"000": "data-v2-abl-000-y26m-b16-s42", "C": "data-v2-abl-001-p2head-b16-s42"}
 
 
+def negative_image_metrics(predictions, background_ids):
+    """Count predictions at confidence 0.25 on images with no annotated objects."""
+    selected = [p for p in predictions if p["image_id"] in background_ids and p["score"] >= .25]
+    images_with_fp = len({p["image_id"] for p in selected})
+    return {"conf": .25, "images": len(background_ids), "images_with_fp": images_with_fp,
+        "image_fp_rate": images_with_fp / len(background_ids), "FP": len(selected),
+        "FP_per_image": len(selected) / len(background_ids),
+        "max_conf": max((p["score"] for p in selected), default=0.)}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source-root", type=Path, required=True, help="C checkout's ultralytics-main directory")
+    parser.add_argument("--source-root", type=Path, required=True, help="Candidate checkout's ultralytics-main directory")
     parser.add_argument("--data-root", type=Path, required=True, help="Dataset containing images/val and labels/val")
     parser.add_argument("--output", type=Path, default=ROOT / "experiment_records/evaluations/data-v2-c-small-val.json")
+    parser.add_argument("--candidate-run", default=RUNS["C"])
+    parser.add_argument("--candidate-label", default="C")
     args = parser.parse_args()
+    runs = {"000": RUNS["000"], args.candidate_label: args.candidate_run}
+    cache_prefix = args.candidate_label.lower() + "-small"
     sys.path.insert(0, str(args.source_root.resolve()))
     import numpy as np
     import torch
@@ -60,7 +75,8 @@ def main():
     assert len(images) == 117 and len(gt["annotations"]) == 557
     assert sum(v for (cat, _), v in counts.items() if cat == 1) == 462
     assert counts[(1, "small")] == 174, counts
-    image_list = ROOT / ".cache/c-small-val-images.txt"
+    background_ids = {item["id"] for item in gt["images"]} - {item["image_id"] for item in gt["annotations"]}
+    image_list = ROOT / ".cache" / f"{cache_prefix}-val-images.txt"
     image_list.parent.mkdir(parents=True, exist_ok=True)
     image_list.write_text("\n".join(str(p.resolve()) for p in images), encoding="utf-8")
 
@@ -75,7 +91,7 @@ def main():
             "mask_policy": "COCO polygon rasterization for GT; full-resolution predicted masks",
             "counts": {str(cat): {area: counts[(cat, area)] for area in ["small", "non_small"]} for cat in [1, 2]}},
         "models": {}}
-    for label, run in RUNS.items():
+    for label, run in runs.items():
         model = YOLO(ROOT / "runs" / run / "weights/best.pt")
         predictions = []
         for index, pred in enumerate(model.predict(source=str(image_list), stream=True, imgsz=640, rect=False,
@@ -91,9 +107,10 @@ def main():
                     "bbox": [x1, y1, x2-x1, y2-y1], "score": float(score), "segmentation": rle})
             if index % 20 == 0:
                 print(f"[PREDICT] {label}: {index}/117", flush=True)
-        pred_file = ROOT / ".cache" / f"c-small-{label}-predictions.json"
+        pred_file = ROOT / ".cache" / f"{cache_prefix}-{label}-predictions.json"
         pred_file.write_text(json.dumps(predictions), encoding="utf-8")
-        result["models"][label] = {"run_id": run, "metrics": {}}
+        result["models"][label] = {"run_id": run, "metrics": {},
+            "negative_images_conf025": negative_image_metrics(predictions, background_ids)}
         for kind in ["bbox", "segm"]:
             coco = COCO()
             coco.dataset = deepcopy(gt)
