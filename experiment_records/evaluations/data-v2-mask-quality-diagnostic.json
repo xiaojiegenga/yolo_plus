@@ -1,0 +1,521 @@
+{
+  "protocol": {
+    "split": "val",
+    "data_root": "E:\\Study\\DeepCNN\\yolo26\\code\\datasets",
+    "images": 117,
+    "instances": 557,
+    "predictions": "Fixed best.pt; FP32, imgsz=640, rect=False, conf=.001, max_det=300, retina_masks=True",
+    "metrics": "COCO 101-point AP; same protocol as data-v2-d1-val.json",
+    "oracle": "score multiplied by maximum same-class GT MaskIoU; GT-assisted diagnostic, not achievable-model AP",
+    "pairing": "Per prediction maximum same-class IoU; diagnostic counts are not one-to-one precision or recall"
+  },
+  "geometry": {
+    "1": {
+      "instances": 462,
+      "small_bbox640_lt1024": 174,
+      "oriented_aspect_ge3": 461,
+      "short_side640_lt8": 285,
+      "area640_q10_q50_q90": [
+        430.41309700664897,
+        1451.059497614183,
+        5046.213734758011
+      ],
+      "short_side640_q10_q50_q90": [
+        5.246944034275121,
+        7.324931712575351,
+        12.134396961209605
+      ],
+      "oriented_aspect_q10_q50_q90": [
+        6.658120871700207,
+        10.347591214334912,
+        16.846660932840702
+      ],
+      "polygon_fill_q10_q50_q90": [
+        0.12910343221453424,
+        0.28219863635945575,
+        0.6599246635971865
+      ]
+    },
+    "2": {
+      "instances": 95,
+      "small_bbox640_lt1024": 6,
+      "oriented_aspect_ge3": 69,
+      "short_side640_lt8": 1,
+      "area640_q10_q50_q90": [
+        1313.9262383680182,
+        3316.468441751922,
+        8971.624737977165
+      ],
+      "short_side640_q10_q50_q90": [
+        15.638533295624807,
+        23.149597079125726,
+        45.40986452402883
+      ],
+      "oriented_aspect_q10_q50_q90": [
+        2.1823941183425855,
+        4.094730616953279,
+        7.202101686105965
+      ],
+      "polygon_fill_q10_q50_q90": [
+        0.2217941455779116,
+        0.407614888432409,
+        0.6201270751820062
+      ]
+    },
+    "instances_per_image_q50_q90_max": [
+      3.0,
+      10.400000000000006,
+      21
+    ],
+    "image_sizes": {
+      "1371x771": 4,
+      "1374x771": 2,
+      "1371x774": 5,
+      "1374x774": 2,
+      "1440x1080": 11,
+      "2122x1591": 8,
+      "2123x1591": 8,
+      "2122x1593": 6,
+      "2123x1593": 7,
+      "1493x1120": 40,
+      "1494x1120": 21,
+      "2157x1616": 1,
+      "2155x1618": 1,
+      "2157x1618": 1
+    }
+  },
+  "models": {
+    "d1-small-000-predictions": {
+      "prediction_source": ".cache\\d1-small-000-predictions.json",
+      "predictions": 12757,
+      "box_overlap_groups": {
+        "0.25": {
+          "predictions": 704,
+          "same_class_box_iou_ge05": 441,
+          "wrong_class_box_iou_ge05": 1,
+          "any_box_iou_01_to05": 53,
+          "any_box_iou_lt01": 209
+        },
+        "0.5": {
+          "predictions": 388,
+          "same_class_box_iou_ge05": 302,
+          "wrong_class_box_iou_ge05": 1,
+          "any_box_iou_01_to05": 19,
+          "any_box_iou_lt01": 66
+        }
+      },
+      "alignment": {
+        "1": {
+          "predictions_conf025": 591,
+          "max_mask_iou_lt05_conf025": 216,
+          "max_box_iou_ge05_conf025": 369,
+          "mask_iou_lt05_at_best_box_conf025": 12,
+          "spearman_score_maskiou_conf025": 0.41550697258658775
+        },
+        "2": {
+          "predictions_conf025": 113,
+          "max_mask_iou_lt05_conf025": 41,
+          "max_box_iou_ge05_conf025": 72,
+          "mask_iou_lt05_at_best_box_conf025": 1,
+          "spearman_score_maskiou_conf025": 0.6531282570365112
+        }
+      },
+      "original": {
+        "1": {
+          "all": {
+            "AP50": 0.7015198096487433,
+            "AP50_95": 0.25958685151954003
+          },
+          "small": {
+            "AP50": 0.5561223469879186,
+            "AP50_95": 0.19311247692299688
+          },
+          "non_small": {
+            "AP50": 0.7877839909517126,
+            "AP50_95": 0.30244440956544516
+          }
+        },
+        "2": {
+          "all": {
+            "AP50": 0.7315830327253984,
+            "AP50_95": 0.4245158161403426
+          },
+          "small": {
+            "AP50": 0.5800079423830233,
+            "AP50_95": 0.3254817183437532
+          },
+          "non_small": {
+            "AP50": 0.7590324188956423,
+            "AP50_95": 0.4387971724817274
+          }
+        },
+        "overall": {
+          "AP50": 0.7165514211870708,
+          "AP50_95": 0.34205133382994135
+        }
+      },
+      "oracle_score_times_iou": {
+        "1": {
+          "all": {
+            "AP50": 0.8621106247507602,
+            "AP50_95": 0.3383086148528793
+          },
+          "small": {
+            "AP50": 0.827140518317914,
+            "AP50_95": 0.2982282898300722
+          },
+          "non_small": {
+            "AP50": 0.8943801154674511,
+            "AP50_95": 0.36491030260215174
+          }
+        },
+        "2": {
+          "all": {
+            "AP50": 0.8483380808822979,
+            "AP50_95": 0.4934729317720482
+          },
+          "small": {
+            "AP50": 0.8990099009900994,
+            "AP50_95": 0.48129066478076377
+          },
+          "non_small": {
+            "AP50": 0.8484164399363947,
+            "AP50_95": 0.4946976202152154
+          }
+        },
+        "overall": {
+          "AP50": 0.8552243528165291,
+          "AP50_95": 0.4158907733124637
+        }
+      },
+      "oracle_overlap_only_unmatched_scores_unchanged": {
+        "1": {
+          "all": {
+            "AP50": 0.5561788257183476,
+            "AP50_95": 0.21471429990790664
+          },
+          "small": {
+            "AP50": 0.39638954624215916,
+            "AP50_95": 0.14232708322928483
+          },
+          "non_small": {
+            "AP50": 0.6757793934680946,
+            "AP50_95": 0.2706025684307107
+          }
+        },
+        "2": {
+          "all": {
+            "AP50": 0.6875757610328428,
+            "AP50_95": 0.4157621805165965
+          },
+          "small": {
+            "AP50": 0.2601457381315055,
+            "AP50_95": 0.14728139783059216
+          },
+          "non_small": {
+            "AP50": 0.7343787261827996,
+            "AP50_95": 0.4391733127277844
+          }
+        },
+        "overall": {
+          "AP50": 0.6218772933755952,
+          "AP50_95": 0.31523824021225155
+        }
+      },
+      "oracle_suppress_any_box_iou_lt01": {
+        "1": {
+          "all": {
+            "AP50": 0.8346690958817616,
+            "AP50_95": 0.3082474171190141
+          },
+          "small": {
+            "AP50": 0.7811545408546535,
+            "AP50_95": 0.2654137707526695
+          },
+          "non_small": {
+            "AP50": 0.8766136341132188,
+            "AP50_95": 0.3380159545608411
+          }
+        },
+        "2": {
+          "all": {
+            "AP50": 0.8087882894562611,
+            "AP50_95": 0.45928441702097056
+          },
+          "small": {
+            "AP50": 0.8424727088093422,
+            "AP50_95": 0.4406797350233677
+          },
+          "non_small": {
+            "AP50": 0.8095725173722856,
+            "AP50_95": 0.461426891382251
+          }
+        },
+        "overall": {
+          "AP50": 0.8217286926690114,
+          "AP50_95": 0.3837659170699923
+        }
+      },
+      "high_score_low_mask_iou_examples": [
+        {
+          "image": "Rice_leaffolder_2x2_p0016_r1c0.jpg",
+          "category": 1,
+          "score": 0.8404886722564697,
+          "mask_iou": 0.0,
+          "box_iou": 0.0
+        },
+        {
+          "image": "Rice_stemborers_2x2_p0038_r0c0.jpg",
+          "category": 2,
+          "score": 0.8108334541320801,
+          "mask_iou": 0.3594342655094825,
+          "box_iou": 0.4859153689235934
+        },
+        {
+          "image": "Rice_stemborers_3x3_p0041_r0c0.jpg",
+          "category": 1,
+          "score": 0.7747941613197327,
+          "mask_iou": 0.0,
+          "box_iou": 0.0
+        },
+        {
+          "image": "Rice_leaffolder_3x3_p0018_r2c1.jpg",
+          "category": 1,
+          "score": 0.7693690657615662,
+          "mask_iou": 0.47180060712573896,
+          "box_iou": 0.539403744072587
+        },
+        {
+          "image": "Rice_leaffolder_2x2_p0033_r0c0.jpg",
+          "category": 1,
+          "score": 0.7659035325050354,
+          "mask_iou": 0.4924429788403408,
+          "box_iou": 0.7594728492035877
+        },
+        {
+          "image": "Rice_leaffolder_3x3_p0005_r2c0.jpg",
+          "category": 1,
+          "score": 0.765285849571228,
+          "mask_iou": 0.0,
+          "box_iou": 0.0
+        }
+      ]
+    },
+    "d1-small-D1-predictions": {
+      "prediction_source": ".cache\\d1-small-D1-predictions.json",
+      "predictions": 10925,
+      "box_overlap_groups": {
+        "0.25": {
+          "predictions": 786,
+          "same_class_box_iou_ge05": 453,
+          "wrong_class_box_iou_ge05": 1,
+          "any_box_iou_01_to05": 60,
+          "any_box_iou_lt01": 272
+        },
+        "0.5": {
+          "predictions": 439,
+          "same_class_box_iou_ge05": 330,
+          "wrong_class_box_iou_ge05": 1,
+          "any_box_iou_01_to05": 14,
+          "any_box_iou_lt01": 94
+        }
+      },
+      "alignment": {
+        "1": {
+          "predictions_conf025": 667,
+          "max_mask_iou_lt05_conf025": 284,
+          "max_box_iou_ge05_conf025": 376,
+          "mask_iou_lt05_at_best_box_conf025": 12,
+          "spearman_score_maskiou_conf025": 0.46840843773407354
+        },
+        "2": {
+          "predictions_conf025": 119,
+          "max_mask_iou_lt05_conf025": 44,
+          "max_box_iou_ge05_conf025": 77,
+          "mask_iou_lt05_at_best_box_conf025": 5,
+          "spearman_score_maskiou_conf025": 0.6654383702065932
+        }
+      },
+      "original": {
+        "1": {
+          "all": {
+            "AP50": 0.6951640505894965,
+            "AP50_95": 0.2634369877857559
+          },
+          "small": {
+            "AP50": 0.5699924433645132,
+            "AP50_95": 0.20072502706706238
+          },
+          "non_small": {
+            "AP50": 0.7703049895542257,
+            "AP50_95": 0.3029489365064118
+          }
+        },
+        "2": {
+          "all": {
+            "AP50": 0.7272359291709527,
+            "AP50_95": 0.4328357619576993
+          },
+          "small": {
+            "AP50": 0.4856875587467755,
+            "AP50_95": 0.2831276893149255
+          },
+          "non_small": {
+            "AP50": 0.7598008130995081,
+            "AP50_95": 0.4495088491029142
+          }
+        },
+        "overall": {
+          "AP50": 0.7111999898802246,
+          "AP50_95": 0.3481363748717276
+        }
+      },
+      "oracle_score_times_iou": {
+        "1": {
+          "all": {
+            "AP50": 0.874119806040357,
+            "AP50_95": 0.3507155413278044
+          },
+          "small": {
+            "AP50": 0.8568758090187609,
+            "AP50_95": 0.31666291631048726
+          },
+          "non_small": {
+            "AP50": 0.8937151216431112,
+            "AP50_95": 0.3742685523229897
+          }
+        },
+        "2": {
+          "all": {
+            "AP50": 0.8372903597832001,
+            "AP50_95": 0.49891104325740404
+          },
+          "small": {
+            "AP50": 0.8340876944837339,
+            "AP50_95": 0.48983573357335736
+          },
+          "non_small": {
+            "AP50": 0.8390795789506743,
+            "AP50_95": 0.5002277863763996
+          }
+        },
+        "overall": {
+          "AP50": 0.8557050829117785,
+          "AP50_95": 0.4248132922926042
+        }
+      },
+      "oracle_overlap_only_unmatched_scores_unchanged": {
+        "1": {
+          "all": {
+            "AP50": 0.5265973584762393,
+            "AP50_95": 0.20870589500959677
+          },
+          "small": {
+            "AP50": 0.3621824499902888,
+            "AP50_95": 0.13273585160783544
+          },
+          "non_small": {
+            "AP50": 0.6505167384195327,
+            "AP50_95": 0.26782602975165215
+          }
+        },
+        "2": {
+          "all": {
+            "AP50": 0.6679364238972181,
+            "AP50_95": 0.40985010729214194
+          },
+          "small": {
+            "AP50": 0.29219016729259134,
+            "AP50_95": 0.17020636792209806
+          },
+          "non_small": {
+            "AP50": 0.7340127451509378,
+            "AP50_95": 0.44692172824683113
+          }
+        },
+        "overall": {
+          "AP50": 0.5972668911867287,
+          "AP50_95": 0.30927800115086934
+        }
+      },
+      "oracle_suppress_any_box_iou_lt01": {
+        "1": {
+          "all": {
+            "AP50": 0.8489596331632,
+            "AP50_95": 0.32046706742979314
+          },
+          "small": {
+            "AP50": 0.8281389969733006,
+            "AP50_95": 0.2860103524324108
+          },
+          "non_small": {
+            "AP50": 0.870647696800582,
+            "AP50_95": 0.3432973091187407
+          }
+        },
+        "2": {
+          "all": {
+            "AP50": 0.809993733856484,
+            "AP50_95": 0.47394364923696786
+          },
+          "small": {
+            "AP50": 0.8239886845827437,
+            "AP50_95": 0.46796862520501137
+          },
+          "non_small": {
+            "AP50": 0.8136603216255149,
+            "AP50_95": 0.4763644658253728
+          }
+        },
+        "overall": {
+          "AP50": 0.8294766835098419,
+          "AP50_95": 0.3972053583333805
+        }
+      },
+      "high_score_low_mask_iou_examples": [
+        {
+          "image": "Rice_stemborers_3x3_p0030_r0c1.jpg",
+          "category": 1,
+          "score": 0.8621805310249329,
+          "mask_iou": 0.0,
+          "box_iou": 0.0
+        },
+        {
+          "image": "Rice_leaffolder_2x2_p0016_r0c0.jpg",
+          "category": 1,
+          "score": 0.834365725517273,
+          "mask_iou": 0.0,
+          "box_iou": 0.0
+        },
+        {
+          "image": "Rice_stemborers_3x3_p0003_r1c1.jpg",
+          "category": 1,
+          "score": 0.8337326049804688,
+          "mask_iou": 0.0,
+          "box_iou": 0.0
+        },
+        {
+          "image": "Rice_leaffolder_3x3_p0018_r1c1.jpg",
+          "category": 1,
+          "score": 0.8327546119689941,
+          "mask_iou": 0.0,
+          "box_iou": 0.0
+        },
+        {
+          "image": "Rice_stemborers_3x3_p0003_r1c1.jpg",
+          "category": 1,
+          "score": 0.8244717121124268,
+          "mask_iou": 0.0,
+          "box_iou": 0.0
+        },
+        {
+          "image": "Rice_stemborers_3x3_p0030_r0c1.jpg",
+          "category": 1,
+          "score": 0.82044917345047,
+          "mask_iou": 0.0,
+          "box_iou": 0.0
+        }
+      ]
+    }
+  }
+}

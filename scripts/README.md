@@ -7,6 +7,7 @@
 - `fill_results_table.py`：仅从正式训练的 `results.csv` 按 Ultralytics 官方分割 fitness（Box mAP50-95 + Mask mAP50-95）选择最佳轮次并更新 `experiment_records/comparison.csv`；默认写入 `data-v2`，也可用 `--data` 指定数据版本。分类别指标仍从独立验证输出或曲线证据人工补录。
 
 - `evaluate_c_small_val.py`：本地对 000 与候选 best.pt 做同协议原图、小目标及纯背景图 Val 评估；默认 C，D1 用 `--candidate-run` / `--candidate-label` / `--output` 指定。需要候选源码与 `pycocotools==2.0.11`；协议和命令见 `experiment_records/evaluations/data-v2-c-small-val.md`、`data-v2-d1-val.md`。
+- `diagnose_mask_quality.py`：读取 Val 标注及上述评估保存的预测，统计目标几何、框重叠分组和使用 GT 辅助的分数对照；后者仅为诊断，不是模型结果。命令与解释见 `knowledge/改进F-局部分类复核头的文献依据与验证方案.md`。
 
 云端只运行训练和打包；`fill_results_table.py` 只在本地使用。当前入口不执行
 哈希、manifest 或备份检查。预检不运行结果回填脚本，也不建立单次记录。参数优化

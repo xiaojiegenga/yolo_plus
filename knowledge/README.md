@@ -8,7 +8,8 @@
 | [改进 B：Instance Dice](改进B-Instance-Dice损失原理与实现.md) | `feature/data-v2-abl-b-dice`，实现 `1d1a71e` | 框内实例 BCE + Soft Dice 的设计与实现原理 |
 | [改进 C：轻量 P2Head](改进C-P2Head小目标分支原理与实现.md) | `feature/data-v2-abl-c-p2head` | P2 旁路、四尺度预测与标准 P3 Mask Proto |
 | [改进 D1：P2 高分辨率掩码原型](改进D1-P2高分辨率掩码原型原理与实现.md) | `feature/data-v2-abl-d-p2proto` | 掩码原型从 stride 4 提升到 stride 2；正式主指标 +0.00979，保留候选 |
-| [改进 E：DySample 动态上采样](改进E-DySample动态上采样原理与实现.md) | `feature/data-v2-abl-e-dysample` | 两处 Neck 上采样的基础概念与实现；待训练 |
+| [改进 E：DySample 动态上采样](改进E-DySample动态上采样原理与实现.md) | `feature/data-v2-abl-e-dysample` | 两处 Neck 上采样；正式实验主指标下降 0.01699，未通过门控 |
+| [改进 F 候选：局部分类复核头](改进F-局部分类复核头的文献依据与验证方案.md) | 方案阶段，未实现完整模型 | 历史实验复盘、标注几何与误检诊断、DCR 文献依据、结构及短验证方案 |
 
 B 文档从 `feature/data-v2-abl-b-dice` 的 `cef6b0b` 原样复制，其中的损失源码、测试和
 训练配置路径对应 B 分支。总体分析分支保留 A 源码，B 的独立实现仍由 B 分支保存。
