@@ -5,6 +5,7 @@
 - `parameter_tuning/<run-id>.md`：用于决定总表表 1 的参数优化 Run 分析；结果只回填总表表 2。
 - `runs/_template.md`：正式 Run 记录模板。
 - `runs/<run-id>.md`：参数冻结后、可用于期刊对比的正式实验记录。
+- `evaluations/`：固定权重后的独立 Val 专项评估说明与机器可读结果；注明指标协议，不混用正式训练指标。
 - `comparison.csv`：仅汇总可用于期刊对比的正式实验；`data` 列记录数据版本。
 - 其他已有子目录：旧仓库的历史实验记录，保持原位。
 
