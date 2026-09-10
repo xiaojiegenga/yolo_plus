@@ -36,6 +36,9 @@ from ultralytics.nn.modules import (
     C2fPSA,
     C3Ghost,
     C3k2,
+    C3k2DRB,
+    DilatedReparamBlock,
+    ZeroInitResidualSCSA,
     C3x,
     CBFuse,
     CBLinear,
@@ -234,6 +237,8 @@ class BaseModel(torch.nn.Module):
         """
         if not self.is_fused():
             for m in self.model.modules():
+                if isinstance(m, DilatedReparamBlock):
+                    m.fuse()
                 if isinstance(m, (Conv, Conv2, DWConv)) and hasattr(m, "bn"):
                     if isinstance(m, Conv2):
                         m.fuse_convs()
@@ -306,6 +311,13 @@ class BaseModel(torch.nn.Module):
         """
         model = weights["model"] if isinstance(weights, dict) else weights  # torchvision models are not dicts
         csd = model.float().state_dict()  # checkpoint state_dict as FP32
+        layer_map = getattr(self, "yaml", {}).get("baseline_layer_map")
+        if layer_map and not getattr(model, "yaml", {}).get("baseline_layer_map"):
+            # Standalone SCSA layers shift indices; transfer by baseline layer identity.
+            csd = {
+                f"model.{layer_map[int(key.split('.')[1])]}.{key.split('.', 2)[2]}": value
+                for key, value in csd.items()
+            }
         updated_csd = intersect_dicts(csd, self.state_dict())  # intersect
         self.load_state_dict(updated_csd, strict=False)  # load
         len_updated_csd = len(updated_csd)
@@ -1816,6 +1828,7 @@ def parse_model(d, ch, verbose=True):
             C2,
             C2f,
             C3k2,
+            C3k2DRB,
             RepNCSPELAN4,
             ELAN1,
             ADown,
@@ -1842,6 +1855,7 @@ def parse_model(d, ch, verbose=True):
             C2,
             C2f,
             C3k2,
+            C3k2DRB,
             C2fAttn,
             C3,
             C3TR,
@@ -1882,7 +1896,7 @@ def parse_model(d, ch, verbose=True):
             if m in repeat_modules:
                 args.insert(2, n)  # number of repeats
                 n = 1
-            if m is C3k2:  # for M/L/X sizes
+            if m in {C3k2, C3k2DRB}:  # for M/L/X sizes
                 legacy = False
                 if scale in "mlx":
                     args[3] = True
@@ -1892,6 +1906,9 @@ def parse_model(d, ch, verbose=True):
                     args.extend((True, 1.2))
             if m is C2fCIB:
                 legacy = False
+        elif m is ZeroInitResidualSCSA:
+            c2 = ch[f]
+            args = [c2]
         elif m is AIFI:
             args = [ch[f], *args]
         elif m in frozenset({HGStem, HGBlock}):

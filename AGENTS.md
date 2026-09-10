@@ -13,7 +13,9 @@
 
 ## 固定研究信息
 
-- 仓库：`xiaojiegenga/yolo_plus`，当前开发分支 `cloud/data-v2-5090`。
+- 仓库：`xiaojiegenga/yolo_plus`；正式 Baseline 分支 `cloud/data-v2-5090`。
+- 当前开发分支：`feature/data-v2-abl-drb-scsa`，从正式 Baseline 提交 `c0f4f35` 建立。
+- A–E 的完整历史分析保留在 `feature/data-v2-abl-a-attention`；本分支不混入其改进源码。
 - 任务：无人机航拍水稻害虫实例分割。
 - 数据集：`rice-pest-data-v2`。
 - 类别：`Rice leaffolder`、`Rice stemborers`。
@@ -22,6 +24,15 @@
 - 主指标：Val Mask mAP50-95。
 - Val 用于选方案；Test 在方案冻结后统一评估。
 - 正式训练 GPU：RTX 5090（已确定）。
+
+## 当前结构实验
+
+- 配置：`experiments/data-v2-abl-drb-scsa-p34-b16-s42.yaml`。
+- 全部 8 个 C3k2 的内部 Bottleneck 替换为 DRB；原第 4、6 层后独立插入零初始化残差 SCSA。
+- 新模型 SCSA 层号为 5、8；保留 C2PSA、末级 C3k2 的 PSA 和原始 Segment26/Proto。
+- DRB 与 SCSA 作为一个完整结构候选，与正式 `000` 比较；本轮不叠加 D1 或其他改进。
+- P2 配方已经冻结，当前配置的全部 `train` 参数与正式 `000` 相同。
+- 操作入口：`实验步骤.md`；教学：`knowledge/全C3k2-DRB与P3P4-SCSA原理与实现.md`。
 
 ## 本地、GitHub 与云端职责
 
@@ -87,7 +98,7 @@
 
 - 未经用户明确要求，不启动正式长时间训练。
 - 10 epoch 预检不进入论文精度排名。
-- 当前参数优化配置中的 batch、workers、epochs 等值不代表正式训练参数已经冻结。
+- 正式配方已冻结：batch=16、epochs=300、workers=8、imgsz=640、seed=42；结构实验保持不变。
 - 不覆盖已有 Run、ZIP、权重或历史记录；重跑使用新 Run ID。
 - 不使用 Test 调参。
 - 参数、模型代码或数据口径变化时使用新 Run ID。

@@ -1,13 +1,28 @@
 # 项目进展记录
 
 > 用途：在不同模型 / 会话之间切换时，快速了解项目当前进展。这里只放**已完成的关键步骤**和**运行结果**；固定规则与架构见 `CLAUDE.md` 与 `AGENTS.md`，实验方案细节见 `云服务器实验设计与记录表.md`。
-> 最后更新：2026-09-03
+> 最后更新：2026-09-10
 
 ## 当前状态（一句话）
 
-RTX 5090 与 data-v2 正式训练参数均已冻结。阶段 0 的正式 `000 Baseline` 已完成 300 epoch、
-回传、解包和结果核验，best epoch 216，official fitness 0.81977，Mask mAP50 / mAP50-95 为
-0.71132 / 0.36348。下一步进入阶段 1，先冻结并实现 B：Dice；尚未启动下一次长训。
+当前分支 `feature/data-v2-abl-drb-scsa` 从正式 Baseline `c0f4f35` 建立，已实现全部
+8 个 C3k2 使用 DRB、原第 4/6 层后独立加入零初始化残差 SCSA。7 项 CPU 测试通过，
+训练步骤与教学已准备；下一步由用户在 RTX 5090 上进行 CUDA 检查、10 epoch 预检和正式训练。
+训练配方与正式 `000` 完全一致，尚无本轮精度结果。
+
+## 当前结构候选与历史接续
+
+- 正式 Run ID：`data-v2-abl-drb-scsa-p34-b16-s42`。
+- 配置：`experiments/data-v2-abl-drb-scsa-p34-b16-s42.yaml`。
+- 云端操作：`实验步骤.md`；教学：`knowledge/全C3k2-DRB与P3P4-SCSA原理与实现.md`。
+- 保留原始 C2PSA、末级 PSA、Segment26/Proto；不包含 A/B/C/D/E 的其他结构改动。
+- 7 项 CPU 检查覆盖结构尺寸、官方权重加载、分割反向、融合与保存加载；CUDA 尚待云端检查。
+- 正式 `000` 的 Mask mAP50 / mAP50-95 为 0.71132 / 0.36348。
+- A–E 完整记录保留在 `feature/data-v2-abl-a-attention`。根据 2026-09-09 交接，D1 的
+  Mask mAP50-95 为 0.37327，保留候选；E 为 0.34649，当前不组合。新候选先独立与 `000` 比较。
+- 本分支的历史总表与轻量结果继承 Baseline 快照；其旧 A/B/C 待定行不代表全项目尚未实验。
+  近期整体结果见 `knowledge/结构改进方向与对话交接-2026-09-09.md`，本轮登记入口为总表表 18。
+- 当前不修改 `comparison.csv`，等完整正式 Run 回传后再分析登记。
 
 ## 已完成的关键步骤
 
@@ -91,18 +106,19 @@ Run ID：`data-v2-tune-mr2-nomix-e300-b16-s42`，相对当前最优 P1 `data-v2-
 
 ## 下一步
 
-1. 冻结 B：Dice 的唯一公式、λ、smooth/epsilon、sigmoid 位置和聚合方式，并登记到总表表 16。
-2. 实现 Dice 源码改动和唯一配置 `data-v2-abl-010-dice-b16-s42`，完成必要的单元/前向检查。
-3. 将源码、配置和轻量记录提交并推送到 `cloud/data-v2-5090`。
-4. 云端拉取新 commit 后先做 10 epoch 预检；正式 300 epoch 长训仍由用户确认后手动启动。
-5. B 的正式结果核验后再按计划冻结 A：Attention、C：P2Head，并依据单模块结果决定组合矩阵。
-6. Val 用于模型和方案比较；Test 只在最终方案与推理阈值冻结后统一执行。
+1. 云端拉取 `feature/data-v2-abl-drb-scsa`，按 `实验步骤.md` 读取本轮显式配置。
+2. 执行 `scripts/check_drb_scsa.py --weights yolo26m-seg.pt --cuda`，通过后运行 10 epoch 预检。
+3. 用户手动启动 `data-v2-abl-drb-scsa-p34-b16-s42` 正式训练，300 epoch 上限、patience=100。
+4. 训练结束后将日志放入 Run，打包、SCP 下载、本地解包。
+5. 回传后创建正式分析并回填总表表 18 与 `comparison.csv`；再判断是否与 D1 组合。
+6. Val 选方案，Test 只在最终方案与推理阈值冻结后统一执行。
 
 ## Git 与本地文件状态
 
-- 当前 Git 根目录：`E:\study\graduate_sec\论文撰写\模型训练`；分支 `cloud/data-v2-5090`，正式 `000` 的训练 commit 为 `1c63ee4`。
-- 本次待提交的轻量内容包括正式 Run 分析、`comparison.csv`、实验总表、消融计划、`PROGRESS.md` 和结果回填脚本口径修正。
-- 云端当前无需启动训练；待 Dice 定义、源码、配置和新 commit 全部冻结后再拉取。
+- 当前 Git 根目录：`E:\study\graduate_sec\论文撰写\模型训练`；分支 `feature/data-v2-abl-drb-scsa`。
+- 正式 `000` 的训练 commit 为 `1c63ee4`；新分支起点为归档该结果后的 `c0f4f35`。
+- 本轮同步内容为 DRB/SCSA 源码、配置、检查脚本、训练教程与进展说明；不改写历史结果。
+- 云端训练由用户按当前实验步骤手动启动。
 - `runs/` 与 `exports/` 按约定不进入 Git。
 
 ## 关键约束（快速提醒）

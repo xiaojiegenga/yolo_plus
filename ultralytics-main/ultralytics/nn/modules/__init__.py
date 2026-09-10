@@ -76,6 +76,7 @@ from .conv import (
     RepConv,
     SpatialAttention,
 )
+from .drb_scsa import C3k2DRB, DilatedReparamBlock, SCSA, ZeroInitResidualSCSA
 from .head import (
     OBB,
     OBB26,
@@ -108,6 +109,10 @@ from .transformer import (
 )
 
 __all__ = (
+    "C3k2DRB",
+    "DilatedReparamBlock",
+    "SCSA",
+    "ZeroInitResidualSCSA",
     "AIFI",
     "C1",
     "C2",

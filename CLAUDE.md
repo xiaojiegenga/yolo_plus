@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 这是什么项目
 
 无人机航拍水稻害虫实例分割实验仓库（继续使用 `xiaojiegenga/yolo_plus`，当前分支
-`cloud/data-v2-5090`）。数据集 `rice-pest-data-v2`，2 类（`Rice leaffolder`、
+`feature/data-v2-abl-drb-scsa`）。数据集 `rice-pest-data-v2`，2 类（`Rice leaffolder`、
 `Rice stemborers`），主选择指标为 **Val Mask mAP50-95**。
 
 开始任何工作前，先按顺序阅读（`PROGRESS.md` 是快速了解当前进展的入口，其余是规则与背景）：
@@ -35,19 +35,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 常用命令
 
-所有命令在仓库根目录执行。没有测试套件或 lint 配置。
+所有命令在仓库根目录执行。当前实验的完整命令见 `实验步骤.md`；
+`scripts/check_drb_scsa.py` 提供结构、权重迁移、融合与反向传播检查。
 
 ```bash
 RUN_ID="replace-with-run-id"
+CONFIG="experiments/data-v2-abl-drb-scsa-p34-b16-s42.yaml"
 
 # 本地：读取配置，只打印最终参数、不训练（先验证配置）
-python scripts/train_yolo26_seg.py --config experiments/yolo26m_seg_5090.yaml --run-name "${RUN_ID}" --dry-run
+python scripts/train_yolo26_seg.py --config "${CONFIG}" --run-name "${RUN_ID}" --dry-run
 
 # 云端：10 epoch 短预检（只用于兼容性/成本判断，不进论文精度排名）
-python scripts/cloud_train_data_v2.py --preflight10 --run-name "${RUN_ID}"
+python scripts/cloud_train_data_v2.py --config "${CONFIG}" --preflight10 --run-name "${RUN_ID}"
 
 # 云端：参数优化或正式训练（使用唯一 Run ID，且由用户明确启动）
-python scripts/cloud_train_data_v2.py --run-name "${RUN_ID}"
+python scripts/cloud_train_data_v2.py --config "${CONFIG}" --run-name "${RUN_ID}"
 
 # 云端：把 runs/<run-id> 打成 exports/<run-id>.zip
 python scripts/transfer_run.py pack --run-id "${RUN_ID}"
@@ -72,6 +74,7 @@ python scripts/fill_results_table.py --run-dir "runs/${RUN_ID}" --run-id "${RUN_
 |---|---|
 | `experiment` | 默认 Run 名称前缀 |
 | `model` | 传给 `YOLO(...)`（本地路径或官方模型名，如 `yolo26m-seg.pt`） |
+| `pretrained` | 可选权重名称或路径；构建自定义模型后通过 `model.load(...)` 加载；命令行优先 |
 | `data` | 解析为数据 YAML，再传给 `model.train(data=...)` |
 | `train` | 其余键原样传给 `model.train(**runtime)` |
 
@@ -121,7 +124,7 @@ python scripts/fill_results_table.py --run-dir "runs/${RUN_ID}" --run-id "${RUN_
 - 总表表 2 只登记决定表 1 的参数优化训练；10 epoch 预检不进表 2 或 `comparison.csv`。
 - 不覆盖已有 Run、ZIP、权重或历史记录；参数、模型代码或数据口径变化时必须换新 Run ID。
 - Val 用于选方案；Test 只在全部方案冻结后统一评估，不用 Test 调参。
-- RTX 5090 已确定；batch、workers、epochs 等正式参数仍待表 2 参数优化后冻结。
+- RTX 5090 与 P2 配方已冻结；当前 DRB/SCSA 配置的全部 `train` 参数与正式 `000` 相同。
 - 不提交数据、模型权重、完整 `runs/`、`exports/`、凭据或 SSH 配置。
 - 只处理当前任务相关修改，不重置用户工作。
 

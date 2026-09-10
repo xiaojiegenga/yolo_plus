@@ -1,140 +1,60 @@
 # YOLO 水稻害虫实例分割实验
 
-本项目继续使用 [xiaojiegenga/yolo_plus](https://github.com/xiaojiegenga/yolo_plus)，
-当前开发分支为 `cloud/data-v2-5090`。
+仓库：[xiaojiegenga/yolo_plus](https://github.com/xiaojiegenga/yolo_plus)。
+当前分支：`feature/data-v2-abl-drb-scsa`，从正式 Baseline `c0f4f35` 建立。
 
-## 工作模式
+## 当前任务
 
-```text
-本地编写代码和配置
-        ↓ git push
-      GitHub
-        ↓ git clone / pull
-云服务器训练 → runs/<run-id>/ → 打包为 exports/<run-id>.zip
-                                      ↓ scp
-参数优化 Run：本地解包 → 写 parameter_tuning 分析 → 更新总表表 2
-期刊正式 Run：本地解包 → 写正式记录 → 更新 comparison.csv
-```
+全部 8 个 C3k2 内部使用 DRB，在原第 4、6 层之后独立加入零初始化残差 SCSA。
+训练配方与正式 `000 Baseline` 相同，使用官方 `yolo26m-seg.pt` 迁移权重。
+源码与 7 项 CPU 检查已完成，RTX 5090 检查和正式训练由用户手动执行。
 
-本地电脑是代码、实验记录和分析结果的唯一工作台。云服务器只负责拉取代码、
-读取已提交的参数、执行训练和打包 Run，不在云端修改配置或填写实验表格。
+- [实验步骤](实验步骤.md)：云端拉取、配置检查、CUDA 检查、预检、正式训练、日志打包和 SCP 下载。
+- [原理与源码教学](knowledge/全C3k2-DRB与P3P4-SCSA原理与实现.md)：模块公式、插入层号、权重加载和检查结果。
+- [当前进展](PROGRESS.md)：本分支接续点。
+- [实验总表](云服务器实验设计与记录表.md)：本轮方案与性能登记在表 18。
 
-当前实验进展先看 `PROGRESS.md`；完整实验表看 `云服务器实验设计与记录表.md`。
+A–E 的完整记录保留在 `feature/data-v2-abl-a-attention`。本分支从 Baseline 隔离开发，
+其历史结果表继承 Baseline 快照；本轮不叠加 D1 或其他改进。近期讨论见
+[2026-09-09 交接](knowledge/结构改进方向与对话交接-2026-09-09.md)。
 
-## 项目结构
+## 工作模式与目录
 
-```text
-.
-├─ experiments/             提交到 GitHub 的实验参数
-├─ scripts/                 训练、打包、解包和结果回填
-├─ experiment_records/      本地维护的实验记录和 comparison.csv
-├─ runs/                    云端生成、本地接收的完整原始 Run
-├─ data/                    数据集或挂载点
-├─ exports/                 临时传输 ZIP，运行时自动创建
-└─ ultralytics-main/        YOLO 源码
-```
+本地编写代码、配置并推送 GitHub；云端拉取、训练、打包；本地通过 SCP 接收 Run，分析并保存。
+云端不修改独立版本的配置，不填写实验表。
 
-`runs/`、`data/`、`exports/` 和模型权重均不提交 Git。参数优化分析写入
-`experiment_records/parameter_tuning/` 并回填总表表 2；参数冻结后、可用于期刊对比
-的正式实验才写入 `experiment_records/runs/` 和 `comparison.csv`。
+| 目录 | 内容 | Git |
+|---|---|---|
+| `experiments/` | 训练参数与数据 YAML | 跟踪 |
+| `scripts/` | 训练、检查、传输和结果回填 | 跟踪 |
+| `ultralytics-main/` | YOLO 模型源码 | 跟踪 |
+| `knowledge/` | 教学与讨论交接 | 跟踪 |
+| `experiment_records/` | 分析、正式记录、comparison.csv | 跟踪 |
+| `runs/` | 本地长期保存的完整原始结果 | 不跟踪 |
+| `exports/` | 传输 ZIP | 不跟踪 |
+| `data/` | 数据集或挂载点 | 不跟踪 |
 
-## 一、本地开发
+本轮配置为 `experiments/data-v2-abl-drb-scsa-p34-b16-s42.yaml`，训练命令必须显式传入
+`--config`；不使用历史调参配置作为默认入口。
 
-1. 修改 `ultralytics-main/`、`scripts/` 或 `experiments/`。
-2. 为实验确定唯一 Run ID。
-3. 在本地提交并推送到 GitHub。
-4. 云端只拉取这个已提交版本。
+云端镜像需要可用的 CUDA PyTorch，`/root/yolo_data` 已包含 `images/` 和 `labels/`。
+缺少其他运行依赖时，云端入口安装仓库内 Ultralytics；首次使用官方权重需要下载。
+具体命令统一维护在 [实验步骤](实验步骤.md)。
 
-当前参数优化配置：
+## 结果记录
 
-- 训练参数：`experiments/yolo26m_seg_5090.yaml`
-- 云端数据：`experiments/yolo_data_v2_cloud.yaml`
-- 默认数据根目录：`/root/yolo_data`
+- 10 epoch 预检：不写表格或单次分析。
+- 参数优化：写 `experiment_records/parameter_tuning/`，只回填总表表 2。
+- 冻结配方的正式结构实验：回传后写 `experiment_records/runs/<run-id>.md`，
+  更新对应正式实验表和 `comparison.csv`，明确 `data=data-v2`。
 
-如果服务器使用其他长期固定的数据路径，应在本地修改数据 YAML 后推送，不在云端
-临时改出一个未提交版本。
+本轮尚未训练，`comparison.csv` 不预填新数据。已有 Run、权重、ZIP 和历史记录不覆盖。
 
-## 二、云服务器从 GitHub 开始训练
+## 固定研究信息
 
-云服务器镜像需要预装可用的 CUDA 版 PyTorch，数据目录需要已经放好：
-
-```text
-/root/yolo_data/
-├─ images/train
-├─ images/val
-├─ images/test
-├─ labels/train
-├─ labels/val
-└─ labels/test
-```
-
-首次使用：
-
-```bash
-git clone --branch cloud/data-v2-5090 https://github.com/xiaojiegenga/yolo_plus.git yolo_plus
-cd yolo_plus
-```
-
-已有仓库时只需更新：
-
-```bash
-git pull --ff-only
-RUN_ID="replace-with-new-unique-run-id"
-python scripts/cloud_train_data_v2.py --run-name "${RUN_ID}"
-```
-
-RTX 5090 已确定。当前处于表 1 参数优化阶段，每次训练前必须先在本地修改配置、
-设置新的 Run ID、提交并推送，再让云端拉取。`yolo26m_seg_5090.yaml` 当前不是最终冻结配置。
-
-入口会保留镜像自带的 PyTorch，并在缺少其他依赖时安装仓库内
-`ultralytics-main`。首次使用官方 `yolo26m-seg.pt` 时可能需要联网下载权重。
-
-## 三、训练 Run 打包并传回本地
-
-训练完成后，使用本次唯一 Run ID 在云端执行：
-
-```bash
-RUN_ID="replace-with-current-run-id"
-python scripts/transfer_run.py pack --run-id "${RUN_ID}"
-```
-
-得到对应的 `exports/<run-id>.zip`。在本地电脑下载：
-
-```powershell
-$sshHost = 'replace-with-ssh-host'
-$runId = 'replace-with-current-run-id'
-scp "${sshHost}:~/yolo_plus/exports/${runId}.zip" .\exports\
-```
-
-`<ssh-host>` 可使用本机 `~/.ssh/config` 中配置的主机别名。
-
-## 四、本地解包、分析和保存
-
-```powershell
-$runId = 'replace-with-current-run-id'
-python scripts/transfer_run.py unpack --archive "exports/${runId}.zip"
-```
-
-参数优化 Run 解包后：
-
-1. 在 `experiment_records/parameter_tuning/<run-id>.md` 分析参数与结果。
-2. 把结果填入 `云服务器实验设计与记录表.md` 表 2。
-3. 不运行 `fill_results_table.py`，不修改 `comparison.csv`。
-
-参数冻结后、可用于期刊对比的正式 Run，才从 `experiment_records/runs/_template.md`
-创建记录并运行：
-
-```powershell
-python scripts/fill_results_table.py --run-dir "runs/${runId}" --run-id "$runId" --data data-v2
-```
-
-只提交配置、代码、轻量记录和表格；完整 `runs/` 与传输 ZIP 留在本地或外部存储。
-
-## 当前数据口径
-
-- Dataset ID：`rice-pest-data-v2`
-- 图片：train / val / test = 938 / 117 / 118
-- `Rice leaffolder`：4027 个实例
-- `Rice stemborers`：1110 个实例
-- 主指标：Val Mask mAP50-95
-- Test：方案冻结后统一评估，不用于调参
+- 无人机航拍水稻害虫实例分割；数据集 `rice-pest-data-v2`。
+- train / val / test = 938 / 117 / 118 张。
+- Rice leaffolder / Rice stemborers = 4027 / 1110 个实例。
+- RTX 5090，batch=16，epochs=300，imgsz=640，seed=42；全部配方见本轮配置。
+- 主指标 Val Mask mAP50-95，同时报告 mAP50；best.pt 维持官方分割 fitness。
+- Val 选方案，Test 在最终方案冻结后统一评估。
