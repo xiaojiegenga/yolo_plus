@@ -32,6 +32,8 @@
 - 新模型 SCSA 层号为 5、8；保留 C2PSA、末级 C3k2 的 PSA 和原始 Segment26/Proto。
 - DRB 与 SCSA 作为一个完整结构候选，与正式 `000` 比较；本轮不叠加 D1 或其他改进。
 - P2 配方已经冻结，当前配置的全部 `train` 参数与正式 `000` 相同。
+- 本轮正式训练已完成并记录为负结果：best epoch 231，Mask mAP50 / mAP50-95 为 0.67664 / 0.31719。
+- 下一版尚未确定；原因分析见 `experiment_records/runs/data-v2-abl-drb-scsa-p34-b16-s42.md`。
 - 操作入口：`实验步骤.md`；教学：`knowledge/全C3k2-DRB与P3P4-SCSA原理与实现.md`。
 
 ## 本地、GitHub 与云端职责

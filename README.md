@@ -7,7 +7,11 @@
 
 全部 8 个 C3k2 内部使用 DRB，在原第 4、6 层之后独立加入零初始化残差 SCSA。
 训练配方与正式 `000 Baseline` 相同，使用官方 `yolo26m-seg.pt` 迁移权重。
-源码与 7 项 CPU 检查已完成，RTX 5090 检查和正式训练由用户手动执行。
+正式训练已完成 300 epoch，登记为负结果：Mask mAP50 / mAP50-95 为
+0.67664 / 0.31719，较正式 000 下降 3.468 / 4.629 个百分点。
+下一步讨论 DRB 封装与替换范围，方案尚未确定。
+
+- [本轮负结果与原因分析](experiment_records/runs/data-v2-abl-drb-scsa-p34-b16-s42.md)。
 
 - [实验步骤](实验步骤.md)：云端拉取、配置检查、CUDA 检查、预检、正式训练、日志打包和 SCP 下载。
 - [原理与源码教学](knowledge/全C3k2-DRB与P3P4-SCSA原理与实现.md)：模块公式、插入层号、权重加载和检查结果。
@@ -48,7 +52,7 @@ A–E 的完整记录保留在 `feature/data-v2-abl-a-attention`。本分支从 
 - 冻结配方的正式结构实验：回传后写 `experiment_records/runs/<run-id>.md`，
   更新对应正式实验表和 `comparison.csv`，明确 `data=data-v2`。
 
-本轮尚未训练，`comparison.csv` 不预填新数据。已有 Run、权重、ZIP 和历史记录不覆盖。
+本轮已写入正式 Run 记录、表 18 和 `comparison.csv`。已有 Run、权重、ZIP 和历史记录不覆盖。
 
 ## 固定研究信息
 
