@@ -2,6 +2,8 @@
 
 本目录在总体分析分支 `feature/data-v2-abl-a-attention` 统一收录 A、B、C、D、E 的知识文档；各独立实现分支保留相关说明。
 
+本分支 `feature/data-v2-abl-f-p3strip` 实现 P3 局部与条带上下文候选。原理、源码映射及云端命令见 [改进 F 教材](改进F-P3局部与条带上下文原理与实现.md)。先独立验证 F，通过后验证 D1+F；实验结果在 `experiment_records/` 维护。
+
 | 文档 | 源码位置 | 内容 |
 |---|---|---|
 | [改进 A：SR-CBAM](改进A-SR-CBAM注意力机制原理与实现.md) | `feature/data-v2-abl-a-attention` | A1 的设计与实现原理 |
@@ -9,7 +11,8 @@
 | [改进 C：轻量 P2Head](改进C-P2Head小目标分支原理与实现.md) | `feature/data-v2-abl-c-p2head` | P2 旁路、四尺度预测与标准 P3 Mask Proto |
 | [改进 D1：P2 高分辨率掩码原型](改进D1-P2高分辨率掩码原型原理与实现.md) | `feature/data-v2-abl-d-p2proto` | 掩码原型从 stride 4 提升到 stride 2；正式主指标 +0.00979，保留候选 |
 | [改进 E：DySample 动态上采样](改进E-DySample动态上采样原理与实现.md) | `feature/data-v2-abl-e-dysample` | 两处 Neck 上采样；正式实验主指标下降 0.01699，未通过门控 |
-| [改进 F 候选：局部分类复核头](改进F-局部分类复核头的文献依据与验证方案.md) | 方案阶段，未实现完整模型 | 历史实验复盘、标注几何与误检诊断、DCR 文献依据、结构及短验证方案 |
+| [改进 F：P3 局部与条带上下文](改进F-P3局部与条带上下文原理与实现.md) | `feature/data-v2-abl-f-p3strip` | 数据几何、逐层计算、深度卷积与残差理论、源码映射、云端训练命令 |
+| [局部分类复核头：文献方案](改进F-局部分类复核头的文献依据与验证方案.md) | 方案资料 | 历史实验复盘、标注几何与误检诊断、DCR 文献依据、结构及短验证方案 |
 
 B 文档从 `feature/data-v2-abl-b-dice` 的 `cef6b0b` 原样复制，其中的损失源码、测试和
 训练配置路径对应 B 分支。总体分析分支保留 A 源码，B 的独立实现仍由 B 分支保存。

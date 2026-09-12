@@ -47,6 +47,7 @@ __all__ = (
     "C3Ghost",
     "C3k2",
     "C3k2SRCBAM",
+    "C3k2StripContext",
     "C3k2ZRCBAM",
     "C3x",
     "CBFuse",
@@ -62,6 +63,7 @@ __all__ = (
     "RepVGGDW",
     "ResNetLayer",
     "SCDown",
+    "StripContext",
     "TorchVision",
 )
 
@@ -1115,6 +1117,58 @@ class C3k2(C2f):
             else Bottleneck(self.c, self.c, shortcut, g)
             for _ in range(n)
         )
+
+
+class StripContext(nn.Module):
+    """Combine local and orthogonal strip context through a residual projection.
+
+    InceptionNeXt: https://arxiv.org/abs/2303.16900
+    """
+
+    def __init__(self, c: int, reduction: int = 4, kernel_size: int = 7):
+        """Initialize the narrow context branches and zero-initialized projection."""
+        super().__init__()
+        hidden = c // reduction
+        self.reduce = Conv(c, hidden, 1)
+        self.local = Conv(hidden, hidden, 3, g=hidden)
+        self.horizontal = Conv(hidden, hidden, (1, kernel_size), g=hidden)
+        self.vertical = Conv(hidden, hidden, (kernel_size, 1), g=hidden)
+        self.project = nn.Conv2d(3 * hidden, c, 1, bias=True)
+        nn.init.zeros_(self.project.weight)
+        nn.init.zeros_(self.project.bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Add the fused local and strip features to the input."""
+        y = self.reduce(x)
+        context = torch.cat((self.local(y), self.horizontal(y), self.vertical(y)), dim=1)
+        return x + self.project(context)
+
+
+class C3k2StripContext(C3k2):
+    """Apply local and strip context after a C3k2 stage."""
+
+    def __init__(
+        self,
+        c1: int,
+        c2: int,
+        n: int = 1,
+        c3k: bool = False,
+        e: float = 0.5,
+        attn: bool = False,
+        g: int = 1,
+        shortcut: bool = True,
+    ):
+        """Initialize the C3k2 path and its context residual."""
+        super().__init__(c1, c2, n, c3k, e, attn, g, shortcut)
+        self.strip_context = StripContext(c2)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply context after the standard C3k2 forward path."""
+        return self.strip_context(super().forward(x))
+
+    def forward_split(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply context after the split-based C3k2 forward path."""
+        return self.strip_context(super().forward_split(x))
 
 
 class C3k2SRCBAM(C3k2):

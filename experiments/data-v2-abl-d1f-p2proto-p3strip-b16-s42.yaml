@@ -1,0 +1,45 @@
+# D1+F: combination ablation, to run after independent F passes Val evaluation.
+# Each structure experiment starts from the same official pretrained checkpoint.
+experiment: data-v2-abl-d1f-p2proto-p3strip-b16-s42
+model: ultralytics-main/ultralytics/cfg/models/26/yolo26m-p2proto-p3-strip-seg.yaml
+pretrained: yolo26m-seg.pt
+data: experiments/yolo_data_v2_cloud.yaml
+
+train:
+  epochs: 300
+  patience: 100
+  batch: 16
+  nbs: 64
+  imgsz: 640
+  device: "0"
+  workers: 8
+  cache: false
+
+  optimizer: AdamW
+  lr0: 0.001667
+  lrf: 0.01
+  momentum: 0.9
+  weight_decay: 0.0005
+  warmup_epochs: 3
+  warmup_bias_lr: 0.1
+  cos_lr: false
+
+  seed: 42
+  deterministic: true
+  amp: true
+
+  mask_ratio: 2
+  mosaic: 1.0
+  mixup: 0.0
+  copy_paste: 0.3
+  degrees: 15
+  flipud: 0.5
+  fliplr: 0.5
+  scale: 0.3
+  close_mosaic: 15
+
+  val: true
+  split: val
+  plots: true
+  project: runs
+  exist_ok: false

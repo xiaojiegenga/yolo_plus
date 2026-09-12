@@ -44,6 +44,7 @@ from .block import (
     C3Ghost,
     C3k2,
     C3k2SRCBAM,
+    C3k2StripContext,
     C3k2ZRCBAM,
     C3x,
     CBFuse,
@@ -60,6 +61,7 @@ from .block import (
     RepVGGDW,
     ResNetLayer,
     SCDown,
+    StripContext,
     TorchVision,
 )
 from .conv import (
@@ -144,6 +146,7 @@ __all__ = (
     "C3Ghost",
     "C3k2",
     "C3k2SRCBAM",
+    "C3k2StripContext",
     "C3k2ZRCBAM",
     "C3x",
     "CBFuse",
@@ -189,6 +192,7 @@ __all__ = (
     "Segment26P2",
     "SemanticSegment",
     "SpatialAttention",
+    "StripContext",
     "ZeroInitResidualCBAM",
     "TorchVision",
     "TransformerBlock",
