@@ -1171,6 +1171,53 @@ class C3k2StripContext(C3k2):
         return self.strip_context(super().forward_split(x))
 
 
+class LocalGateStripContext(StripContext):
+    """Use local features to independently gate horizontal and vertical context."""
+
+    def __init__(self, c: int, reduction: int = 4, kernel_size: int = 7):
+        """Preserve the strip residual and initialize both spatial gates to one."""
+        super().__init__(c, reduction, kernel_size)
+        self.gate = nn.Conv2d(c // reduction, 2, 1, bias=True)
+        nn.init.zeros_(self.gate.weight)
+        nn.init.zeros_(self.gate.bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Gate only the strip branches, retaining local features and the input path."""
+        y = self.reduce(x)
+        local = self.local(y)
+        gates = 2 * self.gate(local).sigmoid()
+        horizontal = gates[:, 0:1] * self.horizontal(y)
+        vertical = gates[:, 1:2] * self.vertical(y)
+        return x + self.project(torch.cat((local, horizontal, vertical), dim=1))
+
+
+class C3k2LocalGate(C3k2):
+    """Apply locally gated strip context after the original C3k2 stage."""
+
+    def __init__(
+        self,
+        c1: int,
+        c2: int,
+        n: int = 1,
+        c3k: bool = False,
+        e: float = 0.5,
+        attn: bool = False,
+        g: int = 1,
+        shortcut: bool = True,
+    ):
+        """Keep the source C3k2 parameter names and add the F2 residual."""
+        super().__init__(c1, c2, n, c3k, e, attn, g, shortcut)
+        self.strip_context = LocalGateStripContext(c2)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply the gated residual to the standard C3k2 output."""
+        return self.strip_context(super().forward(x))
+
+    def forward_split(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply the same gated residual to the split-based C3k2 output."""
+        return self.strip_context(super().forward_split(x))
+
+
 class C3k2SRCBAM(C3k2):
     """Run an original C3k2 stage followed by selective residual CBAM.
 
