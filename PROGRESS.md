@@ -21,6 +21,17 @@
 - CPU FP32 原图配对下，Mask mAP50-95 由 0.34069 升至 0.34665，小卷叶螟 AP50-95 由 0.19247 升至 0.19735；TP 107→122、FP 122→139。补充协议与正式主指标方向不同，不替换冻结门控。
 - D1 继续保留；本次 F 未达到第二个正向结构的要求。正式结果及机制假设见 [F 分析](experiment_records/runs/data-v2-abl-f-p3strip-b16-s42.md)。
 
+## DRB/SCSA 正式负结果归档
+
+- `data-v2-abl-drb-scsa-p34-b16-s42` 已完成 300 epoch，best epoch 231，训练 commit `3a19da2`。
+- Mask mAP50 / mAP50-95 为 0.67664 / 0.31719，较正式 000 下降 3.468 / 4.629 个百分点。
+- 正式负结果及原因分析已收录到 [单次记录](experiment_records/runs/data-v2-abl-drb-scsa-p34-b16-s42.md)，
+  同步登记 `comparison.csv` 与总表表 19；原表 18 保留 D1/E 数据。
+- 优先疑点为完整 Bottleneck 替换导致内部通道混合、激活和局部残差被移除，以及预训练复用减少。
+  两处 SCSA β 已学到 0.27368 / 0.32153，贡献正负尚未分离。
+- 模型源码与配置仍在 `feature/data-v2-abl-drb-scsa`；总体分析分支仅归档记录。
+- 当前不把该整体结构列为有效改进与 D1 组合，下一版封装和替换范围尚未确定。
+
 ## 2026-09-09 讨论记录
 
 - 用户希望第二个有效结构改进明确位于 Backbone、Neck 或 Head，并保留注意力机制方向；D1 继续保留。
@@ -134,9 +145,10 @@ Mask mAP50 / mAP50-95 为 0.68016 / 0.34625，较 `000` 下降 0.03116 / 0.01723
 - [x] A2 冻结为 P3-only Zero-init Residual CBAM：`Y=X+β×CBAM(X)`，`β=0` 初始化
 - [x] 新增 `ZeroInitResidualCBAM`、`C3k2ZRCBAM`、A2 模型 YAML 和正式训练配置
 - [x] A2 聚焦测试通过：4 passed；初始输出严格恒等，只在 Backbone P3 使用新模块
+- [x] A2 正式训练已完成，完整 Run 与训练日志已回传并解包到 `runs/data-v2-abl-a2-p3-zrcbam-b16-s42/`
 
-- [x] 本机项目迁移到 `E:\Study\论文撰写\yolo_plus`，拉取 A、B 远端分支并建立 B 本地跟踪
-- [x] 建立本地 `.venv`，复用本机 `yolo26` Conda 依赖，当前仓库 Ultralytics 以 editable 模式安装；依赖检查、4 项注意力测试和 A2 dry-run 通过
+- [x] 另一台电脑项目迁移到 `E:\Study\论文撰写\yolo_plus`，拉取 A、B 远端分支并建立 B 本地跟踪
+- [x] 另一台电脑建立 `.venv`，复用该机 `yolo26` Conda 依赖，仓库 Ultralytics 以 editable 模式安装；依赖检查、4 项注意力测试和 A2 dry-run 通过
 - [x] A2 完整 Run 已核验：连续 276 epoch，best epoch 176，CSV、训练日志与 best.pt 的 train_metrics 一致
 - [x] A2 已写入单次记录、`comparison.csv` 与实验总表；Mask mAP50 / mAP50-95 为 0.71506 / 0.36109
 - [x] B 独立实现已从远端同步：`feature/data-v2-abl-b-dice`，源码 `1d1a71e`，文档 `cef6b0b`；实例 BCE + 0.5 × Soft Dice，smooth=1.0
@@ -242,20 +254,21 @@ Run ID：`data-v2-tune-mr2-nomix-e300-b16-s42`，相对当前最优 P1 `data-v2-
 
 ## 下一步
 
-1. 000、A1、A2、B、C、D1、E 七组正式结果均已登记；D1 保留为当前优先候选，A1/B/C 未通过门控，A2 暂不组合。
-2. E 已完成正式分析，当前不组合；下一项结构设计待讨论。
-3. 固定数据集与训练配方，直接开展结构消融；E 未通过门控，继续寻找第二个结构，不以数据集排查为前置条件。
+1. 000、A1、A2、B、C、D1、E、F、DRB/SCSA 九组正式结果均已登记；D1 保留为当前正向候选。
+2. F2 已在独立分支实现并推送，云端按 `实验步骤.md` 预检与训练，返回后分析独立结果。
+3. 固定数据集与训练配方；D1+F2 待 F2 独立结果决定，不以数据集排查为前置条件。
 4. 不自动启动组合或重复训练；重新设计任一模块须使用新 Run ID。
-5. 本机本次分析使用 `D:/tool/Anaconda3/envs/yolo26/python.exe`；D checkpoint 使用独立 D checkout 源码读取。
+5. 读取 D checkpoint 时使用包含 D 类定义的源码；本地解释器使用当前电脑已配置的 Python 环境。
 6. Val 用于选方案；Test 保留到最终模型与阈值冻结后统一评估。
 
 ## Git 与本地文件状态
 
 - 当前 Git 根目录：`E:\Study\claude_yolo_plus`；总体分析分支为 `feature/data-v2-abl-a-attention`，当前工作区为总体分析分支，E 独立源码分支为 `feature/data-v2-abl-e-dysample`，A2 实现提交为 `a38aabf`。
+- 另一台电脑的项目目录：`E:\study\graduate_sec\论文撰写\模型训练`；本地路径与 Python 环境由各电脑分别维护。
 - 正式 Baseline 分支为 `cloud/data-v2-5090`，记录提交为 `c0f4f35`；A1 源码为 `9d0c479`、结果记录为 `ac11686`；A2 实现为 `a38aabf`。
-- B 本地分支 `feature/data-v2-abl-b-dice` 跟踪同名远端分支，当前为 `cef6b0b`，源码提交为 `1d1a71e`。B 从 `c0f4f35` 独立分叉，不含注意力改动。
+- B 独立分支为 `feature/data-v2-abl-b-dice`，文档提交为 `cef6b0b`，源码提交为 `1d1a71e`。B 从 `c0f4f35` 独立分叉，不含注意力改动。
 - `feature/data-v2-abl-a-attention` 为总体分析分支，统一维护 A、B、C 知识文档、实验记录与阶段总结；B 配置与损失源码仍由 B 分支维护。
-- `.venv` 基于本机 `D:\tool\Anaconda3\envs\yolo26`：Python 3.10.19、PyTorch 2.10.0+cu130、Ultralytics 8.4.80；本地环境用于开发与结果读取，云端正式环境仍以表 3 和 Run 日志为准。
+- 当前 `E:\Study\claude_yolo_plus` 分析电脑的 `.venv` 基于 `D:\tool\Anaconda3\envs\yolo26`：Python 3.10.19、PyTorch 2.10.0+cu130、Ultralytics 8.4.80；其他电脑的环境由各自维护，云端正式环境仍以表 3 和 Run 日志为准。
 - `runs/`、`exports/`、本机环境与本地配置按约定不进入 Git；GitHub 同步知识文档、轻量分析记录与汇总表。
 
 ## 关键约束（快速提醒）
