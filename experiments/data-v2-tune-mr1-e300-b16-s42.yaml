@@ -1,10 +1,8 @@
-# Stage 3 parameter tuning: mask rasterization ratio 2 -> 1.
-# Relative to data-v2-tune-mr2-nomix-e300-b16-s42 (the round-2 winner that the
-# ablation baseline inherits), mask_ratio is the only field that changes.
-# mask_ratio sets the resolution at which GT polygons are rasterized into mask
-# targets (ultralytics/data/augment.py). At 640 input the mask loss is computed
-# at imgsz/mask_ratio, so 2 -> 1 doubles the resolution at which the thin
-# leaffolder instances are supervised.
+# Mechanism probe on the frozen Baseline: mask_ratio 2 -> 1.
+# No source modification; the official YOLO26m-seg model and the frozen data-v2 / RTX 5090
+# recipe are unchanged except for mask_ratio. This run measures how much of the mask
+# resolution lever is still left, and doubles as the supervision-resolution control arm
+# for any head-side mask module. It is a parameter diagnostic, not a formal ablation.
 
 experiment: data-v2-tune-mr1-e300-b16-s42
 model: yolo26m-seg.pt
