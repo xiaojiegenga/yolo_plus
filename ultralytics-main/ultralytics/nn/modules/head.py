@@ -15,7 +15,18 @@ from ultralytics.utils import NOT_MACOS14
 from ultralytics.utils.tal import dist2bbox, dist2rbox, make_anchors
 from ultralytics.utils.torch_utils import TORCH_1_11, fuse_conv_and_bn, smart_inference_mode
 
-from .block import DFL, SAVPE, BNContrastiveHead, ContrastiveHead, Proto, Proto26, RealNVP, Residual, SwiGLUFFN
+from .block import (
+    DFL,
+    SAVPE,
+    BNContrastiveHead,
+    ContrastiveHead,
+    Proto,
+    Proto26,
+    Proto26DR,
+    RealNVP,
+    Residual,
+    SwiGLUFFN,
+)
 from .conv import Conv, DWConv
 from .transformer import MLP, DeformableTransformerDecoder, DeformableTransformerDecoderLayer
 from .utils import bias_init_with_prob, linear_init
@@ -423,6 +434,67 @@ class Segment26(Segment):
         super().fuse()
         if hasattr(self.proto, "fuse"):
             self.proto.fuse()
+
+
+class Segment26DSS(Segment26):
+    """YOLO26 Segment head with DSS modules: SFCM calibration on neck P3 and the Proto26DR branch.
+
+    Detection weights (cv2/cv3/cv4) and the official prototype path are inherited unchanged from
+    Segment26/Proto26, so they transfer from the official checkpoint. The semantic branch replaces the
+    training-only Proto26.semseg head: sem_trunk reads the neck P3 feature, sem_head keeps the auxiliary
+    semantic supervision slot (loss[4]) and sem_gate produces a foreground map that calibrates P3 for both
+    the detection branch and the prototype branch. gate_scale starts at zero, so the initial forward
+    equals the baseline. Mask prototypes are emitted at stride 2 by Proto26DR using the backbone P2/4
+    feature routed through the head's from-list.
+
+    Attributes:
+        proto (Proto26DR): Dual-resolution prototype module fed by (P2, P3, P4, P5).
+        sem_trunk (Conv): Trunk computing the semantic feature from neck P3.
+        sem_head (nn.Conv2d): Per-class semantic logits for the auxiliary loss slot.
+        sem_gate (nn.Conv2d): Single-channel foreground logit.
+        gate_scale (nn.Parameter): Per-channel calibration scale, zero-initialized.
+    """
+
+    def __init__(self, nc: int = 80, nm: int = 32, npr: int = 256, reg_max=16, end2end=False, ch: tuple = ()):
+        """Initialize the head with P2 routed to the prototype branch and SFCM on neck P3.
+
+        Args:
+            nc (int): Number of classes.
+            nm (int): Number of masks.
+            npr (int): Number of protos.
+            reg_max (int): Maximum number of DFL channels.
+            end2end (bool): Whether to use end-to-end NMS-free detection.
+            ch (tuple): Channel sizes ordered as (P2, P3, P4, P5).
+        """
+        super().__init__(nc, nm, npr, reg_max, end2end, ch[1:])  # detection on P3/P4/P5
+        self.proto = Proto26DR(ch, self.npr, self.nm, nc)  # protos at stride 2 fed by P2/4
+        c_sem = max(self.npr // 4, 32)
+        self.sem_trunk = Conv(ch[1], c_sem, k=3)
+        self.sem_head = nn.Conv2d(c_sem, nc, 1)
+        self.sem_gate = nn.Conv2d(c_sem, 1, 1)
+        self.gate_scale = nn.Parameter(torch.zeros(ch[1]))
+
+    def forward(self, x: list[torch.Tensor]) -> tuple | list[torch.Tensor] | dict[str, torch.Tensor]:
+        """Calibrate neck P3 with the semantic gate, then detect and build prototypes."""
+        p2, p3, p4, p5 = x
+        sem = self.sem_trunk(p3)
+        gate = torch.sigmoid(self.sem_gate(sem))
+        p3_cal = p3 * (1.0 + self.gate_scale.view(1, -1, 1, 1) * gate)
+        outputs = Detect.forward(self, [p3_cal, p4, p5])
+        preds = outputs[1] if isinstance(outputs, tuple) else outputs
+        proto = self.proto((p2, p3_cal, p4, p5))  # mask protos
+        if isinstance(preds, dict):  # training and validating during training
+            proto_out = (proto, self.sem_head(sem)) if self.training else proto
+            if self.end2end:
+                preds["one2many"]["proto"] = proto_out
+                preds["one2one"]["proto"] = (
+                    tuple(p.detach() for p in proto_out) if isinstance(proto_out, tuple) else proto_out.detach()
+                )
+            else:
+                preds["proto"] = proto_out
+        if self.training:
+            return preds
+        return (outputs, proto) if self.export else ((outputs[0], proto), preds)
 
 
 class OBB(Detect):

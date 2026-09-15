@@ -1106,6 +1106,65 @@ class C3k2(C2f):
         )
 
 
+class C3k2DSEM(C3k2):
+    """C3k2 stage followed by a zero-initialized directional strip enhancement residual (DSEM).
+
+    The inherited C3k2 submodule names are unchanged, so official checkpoint weights transfer exactly as in
+    the baseline. The residual reads the stage output with depthwise 7x1 / 1x7 strip convolutions and a
+    pointwise bottleneck; the per-channel scale starts at zero, so the initial forward equals the baseline
+    C3k2. The enhanced output feeds both the next backbone stage and the DSS prototype cross-stage input.
+
+    Attributes:
+        dw (nn.Sequential): Depthwise 7x1 and 1x7 strip convolutions for directional structure.
+        pw (nn.Sequential): Pointwise bottleneck projecting the strip response back to the stage width.
+        alpha (nn.Parameter): Per-channel residual scale, zero-initialized.
+    """
+
+    def __init__(
+        self,
+        c1: int,
+        c2: int,
+        n: int = 1,
+        c3k: bool = False,
+        e: float = 0.5,
+        attn: bool = False,
+        g: int = 1,
+        shortcut: bool = True,
+        r: int = 4,
+    ):
+        """Initialize the baseline C3k2 path and the zero-initialized directional residual.
+
+        Args:
+            c1 (int): Input channels.
+            c2 (int): Output channels.
+            n (int): Number of blocks.
+            c3k (bool): Whether to use C3k blocks.
+            e (float): Expansion ratio.
+            attn (bool): Whether to use attention blocks.
+            g (int): Groups for convolutions.
+            shortcut (bool): Whether to use shortcut connections.
+            r (int): Channel reduction factor of the pointwise bottleneck.
+        """
+        super().__init__(c1, c2, n, c3k, e, attn, g, shortcut)
+        c_mid = max(c2 // r, 16)
+        self.dw = nn.Sequential(
+            nn.Conv2d(c2, c2, (7, 1), padding=(3, 0), groups=c2, bias=False),
+            nn.Conv2d(c2, c2, (1, 7), padding=(0, 3), groups=c2, bias=False),
+        )
+        self.pw = nn.Sequential(Conv(c2, c_mid, 1), Conv(c_mid, c2, 1))
+        self.alpha = nn.Parameter(torch.zeros(c2))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Standard C3k2 forward plus the zero-initialized directional residual."""
+        y = super().forward(x)
+        return y + self.alpha.view(1, -1, 1, 1) * self.pw(self.dw(y))
+
+    def forward_split(self, x: torch.Tensor) -> torch.Tensor:
+        """Split-based C3k2 forward plus the zero-initialized directional residual."""
+        y = super().forward_split(x)
+        return y + self.alpha.view(1, -1, 1, 1) * self.pw(self.dw(y))
+
+
 class C3k(C3):
     """C3k is a CSP bottleneck module with customizable kernel sizes for feature extraction in neural networks."""
 
@@ -2010,6 +2069,71 @@ class Proto26(Proto):
     def fuse(self):
         """Fuse the model for inference by removing the semantic segmentation head."""
         self.semseg = None
+
+
+class Proto26DR(Proto26):
+    """YOLO26 mask Proto module with a dual-resolution output and a P2/4 cross-stage injection (DPRM).
+
+    The official stride-4 synthesis path (feat_refine, feat_fuse, cv1, upsample, cv2, cv3) is inherited
+    unchanged, so its weights transfer from the official checkpoint. Two additions modify the output:
+    a zero-initialized projection of the backbone P2/4 feature is added at the stride-4 stage, and a
+    stride-2 refinement level emits a zero-initialized residual that is summed with the bilinearly
+    upsampled stride-4 prototypes. At initialization the output equals bilinear x2 of the official
+    prototypes, which is exactly what the baseline segmentation loss consumes at mask_ratio=2. The
+    training-only semseg head is removed; semantic supervision moves to the Segment26DSS SFCM branch.
+
+    Attributes:
+        p2_proj (Conv): Zero-initialized 1x1 projection of the P2/4 feature into the fusion width.
+        hi_up (nn.ConvTranspose2d): Narrowing upsample from stride 4 to stride 2.
+        hi_cv (Conv): Refinement convolution at stride 2.
+        hi_strip (nn.Sequential): Depthwise 7x1 / 1x7 strip convolutions for elongated structures.
+        hi_out (nn.Conv2d): Zero-initialized 1x1 output projection of the stride-2 residual.
+    """
+
+    def __init__(self, ch: tuple = (), c_: int = 256, c2: int = 32, nc: int = 80, narrow: int = 4):
+        """Initialize the dual-resolution proto module.
+
+        Args:
+            ch (tuple): Channel sizes ordered as (P2, P3, P4, P5).
+            c_ (int): Intermediate channels of the stride-4 stage.
+            c2 (int): Output channels (number of protos).
+            nc (int): Number of classes (unused, kept for interface parity).
+            narrow (int): Channel reduction factor applied before the stride-2 stage.
+        """
+        super().__init__(ch[1:], c_, c2, nc)
+        del self.semseg  # semantic supervision moves to the Segment26DSS SFCM branch
+        c_hi = max(c_ // narrow, c2)
+        self.p2_proj = Conv(ch[0], c_, k=1)  # conv bias is absorbed by BN; zero weights make the injection exactly 0
+        nn.init.zeros_(self.p2_proj.conv.weight)
+        self.hi_up = nn.ConvTranspose2d(c_, c_hi, 2, 2, 0, bias=True)
+        self.hi_cv = Conv(c_hi, c_hi, k=3)
+        self.hi_strip = nn.Sequential(
+            nn.Conv2d(c_hi, c_hi, (7, 1), padding=(3, 0), groups=c_hi, bias=False),
+            nn.Conv2d(c_hi, c_hi, (1, 7), padding=(0, 3), groups=c_hi, bias=False),
+            nn.SiLU(),
+        )
+        self.hi_out = nn.Conv2d(c_hi, c2, 1, bias=True)
+        nn.init.zeros_(self.hi_out.weight)
+        nn.init.zeros_(self.hi_out.bias)
+
+    def forward(self, x: torch.Tensor, return_semantic: bool = True) -> torch.Tensor:
+        """Fuse P3/P4/P5 at stride 4, inject P2 detail, then emit dual-resolution prototypes."""
+        p2, feats = x[0], x[1:]
+        feat = feats[0]
+        for i, f in enumerate(self.feat_refine):
+            up_feat = f(feats[i + 1])
+            up_feat = F.interpolate(up_feat, size=feat.shape[2:], mode="nearest")
+            feat = feat + up_feat
+        mid = self.cv2(self.upsample(self.cv1(self.feat_fuse(feat))))
+        mid = mid + self.p2_proj(p2)
+        p_lo = self.cv3(mid)  # official stride-4 prototypes, weights transferred
+        hi = self.hi_up(mid)
+        p_hi = self.hi_out(self.hi_cv(hi) + self.hi_strip(hi))  # zero-initialized stride-2 residual
+        return F.interpolate(p_lo, scale_factor=2, mode="bilinear", align_corners=False) + p_hi
+
+    def fuse(self):
+        """Keep every branch: the stride-2 residual and the P2 injection participate in inference."""
+        return self
 
 
 class RealNVP(nn.Module):
