@@ -1,22 +1,25 @@
 # 项目进展记录
 
 > 用途：在不同模型 / 会话之间切换时，快速了解项目当前进展。这里只放**已完成的关键步骤**和**运行结果**；固定规则与架构见 `CLAUDE.md` 与 `AGENTS.md`，实验方案细节见 `云服务器实验设计与记录表.md`。
-> 最后更新：2026-09-08
+> 最后更新：2026-09-15
 
-## 改进 D1 当前状态
+## 改进 H 当前状态
 
-- 首次 Run `data-v2-abl-d1-p2proto-b16-s42`：训练 epoch 1 完成，首轮 Val 中止；无正式 Val 结果。
-- 云端日志：AMP 检查通过，首轮训练行 GPU_mem=14.1 GB，训练耗时 21.3 s。
-- 当前源码提交 `6e9efa9`；Validator 回归覆盖矩形输入、stride-2/4 原型、空预测、裁剪和指标更新，Baseline 后处理逐元素一致。
+- 独立源码分支：`feature/data-v2-abl-h-localrefine`，从 D1 分支正式实现基线创建。
+- 冻结 D1，仅训练由 YOLO26 前五层、GAP 和三分类头组成的局部候选分类器；参数量固定为 1,224,515。
+- 候选只来自 Train，阈值 `0.25`；同类 IoU ≥ `0.5` 为虫类，与全部 GT IoU < `0.1` 为背景，中间区域忽略。
+- 正式配置：`experiments/data-v2-abl-d1h-localrefine-rb128-s42.yaml`；20 epochs、crop batch 128、AdamW、seed 42。
+- Validator 和独立 Predictor 共用置信度精修逻辑；组合 checkpoint 同时保存 D1 和 refiner。
+- 7 项 CPU 聚焦测试已覆盖分类器规模/前向、crop、标签、恒等、空候选、Val/Predict 一致和 checkpoint 回读；GPU 预检与正式训练待云端执行。
+- 正式 Run ID：`data-v2-abl-d1h-localrefine-rb128-s42`；操作入口见 `实验步骤.md`。
 
+## 改进 D1 已完成结果
 
 - 独立源码分支：`feature/data-v2-abl-d-p2proto`，从正式 Baseline `c0f4f35` 创建。
 - 原型分支增加 P2 注入和窄通道细化，640 输入输出 32×320×320 原型；检测 stride=8/16/32。
 - 正式配置：`experiments/data-v2-abl-d1-p2proto-r2-b16-s42.yaml`；全部 33 项 train 参数与 000 相同。
-- 模型构建前设置 seed=42；官方权重迁移与 2 类重建入口为 `scripts/check_p2proto.py`。
-- 源码提交 `4b66461`；10 项聚焦测试及官方权重迁移通过。正式 Run `data-v2-abl-d1-p2proto-r2-b16-s42` 待运行；操作入口见 `实验步骤.md`。
-- 本地 10 项聚焦测试及官方权重迁移通过；源码提交 `4b66461`。2 类 fused Params=23,671,186，GFLOPs@640=135.431782。
-- D1 设计测算保留为待复核参考，实际收益以正式 Val 结果判断。
+- 正式 Run `data-v2-abl-d1-p2proto-r2-b16-s42` 的 Val Mask mAP50-95 为 `0.37327`，原图尺寸 Val 为 `0.34814`。
+- D1 作为后续结构起点，但不单独作为最终论文模型；后续最低主指标固定为 `0.37827`。
 
 ## 已完成实验状态
 

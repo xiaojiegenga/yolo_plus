@@ -1,6 +1,7 @@
 # 改进原理与实现
 
-本目录在总体分析分支 `feature/data-v2-abl-a-attention` 统一收录 A、B、C、D 的知识文档。
+本目录在总体分析分支 `feature/data-v2-abl-a-attention` 统一收录各项改进的知识文档；
+独立实现分支保留对应模块说明。
 
 | 文档 | 源码位置 | 内容 |
 |---|---|---|
@@ -8,6 +9,7 @@
 | [改进 B：Instance Dice](改进B-Instance-Dice损失原理与实现.md) | `feature/data-v2-abl-b-dice`，实现 `1d1a71e` | 框内实例 BCE + Soft Dice 的设计与实现原理 |
 | [改进 C：轻量 P2Head](改进C-P2Head小目标分支原理与实现.md) | `feature/data-v2-abl-c-p2head` | P2 旁路、四尺度预测与标准 P3 Mask Proto |
 | [改进 D1：P2 高分辨率掩码原型](改进D1-P2高分辨率掩码原型原理与实现.md) | `feature/data-v2-abl-d-p2proto` | 掩码原型从 stride 4 提升到 stride 2 的设计与实现原理 |
+| [改进 H：局部候选分类精修](改进H-局部候选分类精修原理与实现.md) | `feature/data-v2-abl-h-localrefine` | 冻结 D1，使用独立三分类器复核候选置信度 |
 
 B 文档从 `feature/data-v2-abl-b-dice` 的 `cef6b0b` 原样复制，其中的损失源码、测试和
 训练配置路径对应 B 分支。总体分析分支保留 A 源码，B 的独立实现仍由 B 分支保存。

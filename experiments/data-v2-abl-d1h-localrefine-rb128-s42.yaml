@@ -1,0 +1,39 @@
+# H: freeze formal D1 and refine only candidate confidence with a local classifier.
+experiment: data-v2-abl-d1h-localrefine-rb128-s42
+model: runs/data-v2-abl-d1-p2proto-r2-b16-s42/weights/best.pt
+data: experiments/yolo_data_v2_cloud.yaml
+
+refiner:
+  crop_size: 96
+  backbone_layers: 5
+  in_channels: 512
+  num_classes: 3
+  candidate_conf: 0.25
+  positive_iou: 0.5
+  background_iou: 0.1
+  score_batch_size: 128
+  d1_mask_map_reference: 0.37327
+  d1_calibration_tolerance: 0.002
+
+train:
+  epochs: 20
+  batch: 128
+  imgsz: 640
+  device: "0"
+  workers: 8
+
+  optimizer: AdamW
+  lr0: 0.0001
+  weight_decay: 0.0005
+
+  seed: 42
+  deterministic: true
+  amp: true
+  flipud: 0.5
+  fliplr: 0.5
+
+  val_batch: 16
+  val_conf: 0.001
+  val_iou: 0.7
+  max_det: 300
+  project: runs

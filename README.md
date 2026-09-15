@@ -6,8 +6,10 @@
 独立 B 分支 `feature/data-v2-abl-b-dice` 的完整 Run 已回传并核验，本次 Dice 未通过门控。
 C 分支 `feature/data-v2-abl-c-p2head` 已完成 300 epoch 并核验，best epoch 282；本次轻量 P2Head 未通过门控。
 
-D1 训练分支为 `feature/data-v2-abl-d-p2proto`，只改变掩码原型分支，正式训练待运行。
-配置为 `experiments/data-v2-abl-d1-p2proto-r2-b16-s42.yaml`，云端步骤见 [实验步骤](实验步骤.md)。
+D1 已完成正式训练，Val Mask mAP50-95 为 `0.37327`，原图尺寸 Val 为 `0.34814`。
+当前 H 实现分支为 `feature/data-v2-abl-h-localrefine`：冻结 D1，只用独立三分类器精修候选
+置信度；正式 Run `data-v2-abl-d1h-localrefine-rb128-s42` 待云端运行，步骤见
+[实验步骤](实验步骤.md)。
 
 ## 工作模式
 
@@ -49,7 +51,8 @@ C 的总体结果、成本和小目标召回/误检取舍见 [C 正式分析](ex
 
 ## 本机开发环境
 
-当前电脑已建立 `.venv` 并安装仓库内 Ultralytics，可在 PowerShell 项目根目录执行：
+本地电脑只做源码、配置、CPU 静态检查和回传结果分析，不承担训练或 CUDA 性能测试。
+可在 PowerShell 项目根目录执行结果回填等本地工具：
 
 ```powershell
 $env:YOLO_CONFIG_DIR = Join-Path (Get-Location) '.cache\ultralytics'
@@ -74,6 +77,8 @@ $env:PYTHONUTF8 = '1'
 - `A2 P3 ZR-CBAM`：A 分支 `experiments/data-v2-abl-a2-p3-zrcbam-b16-s42.yaml`（已完成，best epoch 176；近似持平）
 - `B Dice`：B 分支 `experiments/data-v2-abl-010-dice-b16-s42.yaml`（已完成，best epoch 243；未通过门控）
 - `C P2Head`：C 分支 `experiments/data-v2-abl-001-p2head-b16-s42.yaml`（已完成，best epoch 282；未通过门控）
+- `D1 P2Proto`：D 分支 `experiments/data-v2-abl-d1-p2proto-r2-b16-s42.yaml`（已完成，Mask mAP50-95 `0.37327`）
+- `H Local Refiner`：H 分支 `experiments/data-v2-abl-d1h-localrefine-rb128-s42.yaml`（待云端运行）
 - 云端数据：`experiments/yolo_data_v2_cloud.yaml`
 - 默认数据根目录：`/root/yolo_data`
 
@@ -94,14 +99,14 @@ $env:PYTHONUTF8 = '1'
 └─ labels/test
 ```
 
-首次拉取 D1 训练代码：
+首次拉取 H 训练代码：
 
 ```bash
-git clone --branch feature/data-v2-abl-d-p2proto https://github.com/xiaojiegenga/yolo_plus.git yolo_plus
+git clone --branch feature/data-v2-abl-h-localrefine https://github.com/xiaojiegenga/yolo_plus.git yolo_plus
 cd yolo_plus
 ```
 
-已有仓库使用 `git fetch origin`、`git switch feature/data-v2-abl-d-p2proto`、`git pull --ff-only`。
+已有仓库使用 `git fetch origin`、`git switch feature/data-v2-abl-h-localrefine`、`git pull --ff-only`。
 按 [实验步骤](实验步骤.md) 检查结构、执行预检并手动启动正式训练。
 
 入口会保留镜像自带的 PyTorch，并在缺少其他依赖时安装仓库内

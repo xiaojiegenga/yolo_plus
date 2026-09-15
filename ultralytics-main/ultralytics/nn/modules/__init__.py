@@ -95,6 +95,7 @@ from .head import (
     YOLOESegment26,
     v10Detect,
 )
+from .refiner import LocalCropRefiner
 from .transformer import (
     AIFI,
     MLP,
@@ -164,6 +165,7 @@ __all__ = (
     "LRPCHead",
     "LayerNorm2d",
     "LightConv",
+    "LocalCropRefiner",
     "MLPBlock",
     "MSDeformAttn",
     "MaxSigmoidAttnBlock",
