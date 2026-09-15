@@ -20,6 +20,7 @@ __all__ = (
     "C3TR",
     "CIB",
     "DFL",
+    "DiagonalConv",
     "ELAN1",
     "PSA",
     "SPP",
@@ -37,6 +38,7 @@ __all__ = (
     "C2fPSA",
     "C3Ghost",
     "C3k2",
+    "C3k2OrientedStrip",
     "C3x",
     "CBFuse",
     "CBLinear",
@@ -45,6 +47,7 @@ __all__ = (
     "HGBlock",
     "HGStem",
     "ImagePoolingAttn",
+    "OrientedStripContext",
     "Proto",
     "RepC3",
     "RepNCSPELAN4",
@@ -1104,6 +1107,104 @@ class C3k2(C2f):
             else Bottleneck(self.c, self.c, shortcut, g)
             for _ in range(n)
         )
+
+
+class DiagonalConv(Conv):
+    """Depthwise convolution restricted to one diagonal of a square kernel.
+
+    The masked kernel keeps the orthogonal strips of InceptionNeXt
+    (https://arxiv.org/abs/2303.16900) available for diagonal orientations. Only the
+    diagonal taps carry non-zero weights, so the branch costs one kernel tap per output.
+    """
+
+    def __init__(self, c: int, k: int = 11, anti: bool = False):
+        """Initialize the masked depthwise kernel and its fixed diagonal.
+
+        Args:
+            c (int): Number of input and output channels.
+            k (int): Square kernel size, also the number of active taps.
+            anti (bool): Whether to sample the anti-diagonal instead of the main diagonal.
+        """
+        super().__init__(c, c, k, g=c)
+        diagonal = torch.eye(k).flip(0) if anti else torch.eye(k)
+        self.register_buffer("diagonal", diagonal.view(1, 1, k, k), persistent=False)
+
+    def _diagonal_conv(self, x: torch.Tensor) -> torch.Tensor:
+        """Convolve with the kernel restricted to its fixed diagonal."""
+        conv = self.conv
+        return F.conv2d(x, conv.weight * self.diagonal, conv.bias, conv.stride, conv.padding, conv.dilation, conv.groups)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply the diagonal convolution, batch normalization and activation."""
+        return self.act(self.bn(self._diagonal_conv(x)))
+
+    def forward_fuse(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply the diagonal convolution and activation without batch normalization."""
+        return self.act(self._diagonal_conv(x))
+
+
+class OrientedStripContext(nn.Module):
+    """Fuse local context with orthogonal and diagonal strip context through a residual projection.
+
+    Extends the InceptionNeXt strip branches (https://arxiv.org/abs/2303.16900) to both
+    diagonal directions, so that elongated instances are covered at any orientation. The
+    projection is zero-initialized and the module therefore starts as an identity mapping.
+    """
+
+    def __init__(self, c: int, reduction: int = 4, kernel_size: int = 11):
+        """Initialize the narrow context branches and zero-initialized projection.
+
+        Args:
+            c (int): Number of input and output channels.
+            reduction (int): Channel reduction ratio of the context branches.
+            kernel_size (int): Strip length, applied along each of the four orientations.
+        """
+        super().__init__()
+        hidden = c // reduction
+        self.reduce = Conv(c, hidden, 1)
+        self.local = Conv(hidden, hidden, 3, g=hidden)
+        self.horizontal = Conv(hidden, hidden, (1, kernel_size), g=hidden)
+        self.vertical = Conv(hidden, hidden, (kernel_size, 1), g=hidden)
+        self.diagonal = DiagonalConv(hidden, kernel_size)
+        self.antidiagonal = DiagonalConv(hidden, kernel_size, anti=True)
+        self.project = nn.Conv2d(5 * hidden, c, 1, bias=True)
+        nn.init.zeros_(self.project.weight)
+        nn.init.zeros_(self.project.bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Add the fused local and oriented strip features to the input."""
+        y = self.reduce(x)
+        context = torch.cat(
+            (self.local(y), self.horizontal(y), self.vertical(y), self.diagonal(y), self.antidiagonal(y)), dim=1
+        )
+        return x + self.project(context)
+
+
+class C3k2OrientedStrip(C3k2):
+    """Apply local and oriented strip context after a C3k2 stage."""
+
+    def __init__(
+        self,
+        c1: int,
+        c2: int,
+        n: int = 1,
+        c3k: bool = False,
+        e: float = 0.5,
+        attn: bool = False,
+        g: int = 1,
+        shortcut: bool = True,
+    ):
+        """Initialize the C3k2 path and its oriented context residual."""
+        super().__init__(c1, c2, n, c3k, e, attn, g, shortcut)
+        self.oriented_context = OrientedStripContext(c2)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply context after the standard C3k2 forward path."""
+        return self.oriented_context(super().forward(x))
+
+    def forward_split(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply context after the split-based C3k2 forward path."""
+        return self.oriented_context(super().forward_split(x))
 
 
 class C3k(C3):
