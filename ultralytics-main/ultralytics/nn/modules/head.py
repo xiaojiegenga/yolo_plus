@@ -23,6 +23,7 @@ from .block import (
     Proto,
     Proto26,
     Proto26DR,
+    Proto26DRNoDual,
     RealNVP,
     Residual,
     SwiGLUFFN,
@@ -458,6 +459,8 @@ class Segment26DSS(Segment26):
     # Class-level switch so checkpoints pickled before this attribute existed (cmp1) still work:
     # class attributes are resolved from the class, never from the pickled instance state.
     sfcm_gate = True
+    # Class-level switch for the nodual ablation: selects the prototype variant in __init__.
+    dual_output = True
 
     def __init__(self, nc: int = 80, nm: int = 32, npr: int = 256, reg_max=16, end2end=False, ch: tuple = ()):
         """Initialize the head with P2 routed to the prototype branch and SFCM on neck P3.
@@ -471,7 +474,8 @@ class Segment26DSS(Segment26):
             ch (tuple): Channel sizes ordered as (P2, P3, P4, P5).
         """
         super().__init__(nc, nm, npr, reg_max, end2end, ch[1:])  # detection on P3/P4/P5
-        self.proto = Proto26DR(ch, self.npr, self.nm, nc)  # protos at stride 2 fed by P2/4
+        proto_cls = Proto26DR if self.dual_output else Proto26DRNoDual
+        self.proto = proto_cls(ch, self.npr, self.nm, nc)  # protos fed by P2/4, stride 2 or 4
         c_sem = max(self.npr // 4, 32)
         self.sem_trunk = Conv(ch[1], c_sem, k=3)
         self.sem_head = nn.Conv2d(c_sem, nc, 1)
@@ -514,6 +518,17 @@ class Segment26DSSNoSFCM(Segment26DSS):
     """
 
     sfcm_gate = False
+
+
+class Segment26DSSNoDual(Segment26DSS):
+    """nodual ablation head: prototypes revert to stride 4; DSEM and the SFCM gate stay on.
+
+    Only the stride-2 residual level of the prototype branch is bypassed (Proto26DRNoDual); the
+    P2 cross-stage injection keeps working, so this run isolates the dual-resolution mechanism
+    from the rest of the compound. The hi_* parameters remain in the state dict without gradients.
+    """
+
+    dual_output = False
 
 
 class OBB(Detect):

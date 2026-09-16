@@ -2090,6 +2090,10 @@ class Proto26DR(Proto26):
         hi_out (nn.Conv2d): Zero-initialized 1x1 output projection of the stride-2 residual.
     """
 
+    # Class-level switch for the nodual ablation; resolved from the class so checkpoints pickled
+    # before the attribute existed keep their original behavior.
+    dual_output = True
+
     def __init__(self, ch: tuple = (), c_: int = 256, c2: int = 32, nc: int = 80, narrow: int = 4):
         """Initialize the dual-resolution proto module.
 
@@ -2127,13 +2131,27 @@ class Proto26DR(Proto26):
         mid = self.cv2(self.upsample(self.cv1(self.feat_fuse(feat))))
         mid = mid + self.p2_proj(p2)
         p_lo = self.cv3(mid)  # official stride-4 prototypes, weights transferred
-        hi = self.hi_up(mid)
-        p_hi = self.hi_out(self.hi_cv(hi) + self.hi_strip(hi))  # zero-initialized stride-2 residual
-        return F.interpolate(p_lo, scale_factor=2, mode="bilinear", align_corners=False) + p_hi
+        if self.dual_output:
+            hi = self.hi_up(mid)
+            p_hi = self.hi_out(self.hi_cv(hi) + self.hi_strip(hi))  # zero-initialized stride-2 residual
+            return F.interpolate(p_lo, scale_factor=2, mode="bilinear", align_corners=False) + p_hi
+        return p_lo  # nodual ablation: baseline-resolution prototypes, loss interpolates as the baseline
 
     def fuse(self):
         """Keep every branch: the stride-2 residual and the P2 injection participate in inference."""
         return self
+
+
+class Proto26DRNoDual(Proto26DR):
+    """nodual ablation: the stride-2 residual level is bypassed, prototypes stay at stride 4.
+
+    The P2 cross-stage injection and the official stride-4 synthesis path are unchanged; the
+    hi_* parameters remain in the state dict but receive no gradients. At initialization the
+    module equals the baseline Proto26 exactly (p2_proj is zero), and the segmentation loss
+    interpolates the 160x160 prototypes to the label grid exactly as the baseline does.
+    """
+
+    dual_output = False
 
 
 class RealNVP(nn.Module):

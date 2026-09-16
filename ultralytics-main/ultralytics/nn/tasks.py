@@ -69,6 +69,7 @@ from ultralytics.nn.modules import (
     Segment26,
     Segment26DSS,
     Segment26DSSNoSFCM,
+    Segment26DSSNoDual,
     SemanticSegment,
     TorchVision,
     WorldDetect,
@@ -1920,6 +1921,7 @@ def parse_model(d, ch, verbose=True):
                 Segment26,
                 Segment26DSS,
                 Segment26DSSNoSFCM,
+                Segment26DSSNoDual,
                 YOLOESegment,
                 YOLOESegment26,
                 Pose,
@@ -1929,7 +1931,15 @@ def parse_model(d, ch, verbose=True):
             }
         ):
             args.extend([reg_max, end2end, [ch[x] for x in f]])
-            if m in {Segment, YOLOESegment, Segment26, Segment26DSS, Segment26DSSNoSFCM, YOLOESegment26}:
+            if m in {
+                Segment,
+                YOLOESegment,
+                Segment26,
+                Segment26DSS,
+                Segment26DSSNoSFCM,
+                Segment26DSSNoDual,
+                YOLOESegment26,
+            }:
                 args[2] = make_divisible(min(args[2], max_channels) * width, 8)
             if m in {
                 Detect,
@@ -1938,6 +1948,7 @@ def parse_model(d, ch, verbose=True):
                 Segment26,
                 Segment26DSS,
                 Segment26DSSNoSFCM,
+                Segment26DSSNoDual,
                 YOLOESegment,
                 YOLOESegment26,
                 Pose,
