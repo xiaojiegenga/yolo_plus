@@ -455,6 +455,10 @@ class Segment26DSS(Segment26):
         gate_scale (nn.Parameter): Per-channel calibration scale, zero-initialized.
     """
 
+    # Class-level switch so checkpoints pickled before this attribute existed (cmp1) still work:
+    # class attributes are resolved from the class, never from the pickled instance state.
+    sfcm_gate = True
+
     def __init__(self, nc: int = 80, nm: int = 32, npr: int = 256, reg_max=16, end2end=False, ch: tuple = ()):
         """Initialize the head with P2 routed to the prototype branch and SFCM on neck P3.
 
@@ -475,11 +479,14 @@ class Segment26DSS(Segment26):
         self.gate_scale = nn.Parameter(torch.zeros(ch[1]))
 
     def forward(self, x: list[torch.Tensor]) -> tuple | list[torch.Tensor] | dict[str, torch.Tensor]:
-        """Calibrate neck P3 with the semantic gate, then detect and build prototypes."""
+        """Calibrate neck P3 with the semantic gate (when enabled), then detect and build prototypes."""
         p2, p3, p4, p5 = x
         sem = self.sem_trunk(p3)
-        gate = torch.sigmoid(self.sem_gate(sem))
-        p3_cal = p3 * (1.0 + self.gate_scale.view(1, -1, 1, 1) * gate)
+        if self.sfcm_gate:
+            gate = torch.sigmoid(self.sem_gate(sem))
+            p3_cal = p3 * (1.0 + self.gate_scale.view(1, -1, 1, 1) * gate)
+        else:
+            p3_cal = p3  # nosfcm ablation: gate out of the path, auxiliary supervision kept
         outputs = Detect.forward(self, [p3_cal, p4, p5])
         preds = outputs[1] if isinstance(outputs, tuple) else outputs
         proto = self.proto((p2, p3_cal, p4, p5))  # mask protos
@@ -495,6 +502,18 @@ class Segment26DSS(Segment26):
         if self.training:
             return preds
         return (outputs, proto) if self.export else ((outputs[0], proto), preds)
+
+
+class Segment26DSSNoSFCM(Segment26DSS):
+    """nosfcm ablation head: the semantic foreground gate is bypassed, auxiliary supervision stays.
+
+    Identical to Segment26DSS except that P3 is passed to the detection and prototype branches
+    uncalibrated. sem_trunk and sem_head keep producing semantic logits for the auxiliary loss slot
+    (loss[4]), so this run isolates the contribution of the gate itself beyond plain auxiliary
+    semantic supervision. sem_gate and gate_scale remain in the state dict but receive no gradients.
+    """
+
+    sfcm_gate = False
 
 
 class OBB(Detect):
