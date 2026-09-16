@@ -24,6 +24,7 @@ from .block import (
     Proto26,
     Proto26DR,
     Proto26DRNoDual,
+    Proto26DRNoP2,
     RealNVP,
     Residual,
     SwiGLUFFN,
@@ -461,6 +462,8 @@ class Segment26DSS(Segment26):
     sfcm_gate = True
     # Class-level switch for the nodual ablation: selects the prototype variant in __init__.
     dual_output = True
+    # Class-level switch for the nop2inj ablation: selects the prototype variant in __init__.
+    p2_inject = True
 
     def __init__(self, nc: int = 80, nm: int = 32, npr: int = 256, reg_max=16, end2end=False, ch: tuple = ()):
         """Initialize the head with P2 routed to the prototype branch and SFCM on neck P3.
@@ -474,7 +477,12 @@ class Segment26DSS(Segment26):
             ch (tuple): Channel sizes ordered as (P2, P3, P4, P5).
         """
         super().__init__(nc, nm, npr, reg_max, end2end, ch[1:])  # detection on P3/P4/P5
-        proto_cls = Proto26DR if self.dual_output else Proto26DRNoDual
+        if not self.dual_output:
+            proto_cls = Proto26DRNoDual
+        elif not self.p2_inject:
+            proto_cls = Proto26DRNoP2
+        else:
+            proto_cls = Proto26DR
         self.proto = proto_cls(ch, self.npr, self.nm, nc)  # protos fed by P2/4, stride 2 or 4
         c_sem = max(self.npr // 4, 32)
         self.sem_trunk = Conv(ch[1], c_sem, k=3)
@@ -529,6 +537,17 @@ class Segment26DSSNoDual(Segment26DSS):
     """
 
     dual_output = False
+
+
+class Segment26DSSNoP2(Segment26DSS):
+    """nop2inj ablation head: the P2 cross-stage injection is bypassed; DSEM stays on.
+
+    The head still receives the DSEM-enhanced layer-2 feature but the prototype branch ignores
+    it (Proto26DRNoP2), so this run isolates the injection from DSEM's backbone-wide effect.
+    The SFCM gate and the dual-resolution branch are unchanged.
+    """
+
+    p2_inject = False
 
 
 class OBB(Detect):

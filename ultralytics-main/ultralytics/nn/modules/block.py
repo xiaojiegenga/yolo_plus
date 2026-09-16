@@ -2093,6 +2093,9 @@ class Proto26DR(Proto26):
     # Class-level switch for the nodual ablation; resolved from the class so checkpoints pickled
     # before the attribute existed keep their original behavior.
     dual_output = True
+    # Class-level switch for the nop2inj ablation: the head still receives the layer-2 feature
+    # in its from-list, but the prototype branch does not inject it.
+    p2_inject = True
 
     def __init__(self, ch: tuple = (), c_: int = 256, c2: int = 32, nc: int = 80, narrow: int = 4):
         """Initialize the dual-resolution proto module.
@@ -2129,7 +2132,8 @@ class Proto26DR(Proto26):
             up_feat = F.interpolate(up_feat, size=feat.shape[2:], mode="nearest")
             feat = feat + up_feat
         mid = self.cv2(self.upsample(self.cv1(self.feat_fuse(feat))))
-        mid = mid + self.p2_proj(p2)
+        if self.p2_inject:
+            mid = mid + self.p2_proj(p2)
         p_lo = self.cv3(mid)  # official stride-4 prototypes, weights transferred
         if self.dual_output:
             hi = self.hi_up(mid)
@@ -2152,6 +2156,18 @@ class Proto26DRNoDual(Proto26DR):
     """
 
     dual_output = False
+
+
+class Proto26DRNoP2(Proto26DR):
+    """nop2inj ablation: the P2 cross-stage injection is bypassed.
+
+    The head still receives the (DSEM-enhanced) layer-2 feature in its from-list, but the
+    prototype branch ignores it; DSEM's effect through the rest of the network is unchanged.
+    p2_proj remains in the state dict without gradients. At initialization the module equals
+    the full Proto26DR (whose p2_proj is zero anyway).
+    """
+
+    p2_inject = False
 
 
 class RealNVP(nn.Module):
