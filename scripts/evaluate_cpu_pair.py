@@ -230,47 +230,73 @@ def main() -> None:
             predictions = json.loads(pred_file.read_text(encoding="utf-8"))
             print(f"[CACHE] {label}: reusing {len(predictions)} cached predictions from {pred_file}", flush=True)
         else:
-            model = YOLO(str(weights))
+            # Crash-resumable inference cache: one JSON per line, appended and flushed per image.
+            # If the process dies (e.g. native segfault under RAM pressure), rerunning the same
+            # command resumes from the first unfinished image instead of starting over.
+            jsonl_file = cache / f"cpupair-{label}-predictions.jsonl"
             predictions = []
-            for index, pred in enumerate(
-                model.predict(
-                    source=str(image_list),
-                    stream=True,
-                    imgsz=640,
-                    rect=False,
-                    batch=1,
-                    conf=0.001,
-                    iou=0.7,
-                    max_det=300,
-                    retina_masks=True,
-                    half=False,
-                    device="cpu",
-                    save=False,
-                    verbose=False,
-                ),
-                1,
-            ):
-                image_id = paths[str(Path(pred.path).resolve())]
-                masks = pred.masks.data.cpu().numpy() if pred.masks is not None else []
-                for xyxy, score, cls, mask in zip(
-                    pred.boxes.xyxy.cpu().numpy(), pred.boxes.conf.cpu().numpy(), pred.boxes.cls.cpu().numpy(), masks
+            done_ids = set()
+            if jsonl_file.exists():
+                with jsonl_file.open("r", encoding="utf-8") as fh:
+                    for line in fh:
+                        try:
+                            record = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue  # torn tail line from a crashed run
+                        predictions.append(record)
+                        done_ids.add(record["image_id"])
+            remaining = [p for p in images if paths[str(p.resolve())] not in done_ids]
+            print(f"[PREDICT] {label}: {len(done_ids)} images cached, {len(remaining)} to go", flush=True)
+            model = YOLO(str(weights))
+            # Predict from a txt manifest, not a python list: the list source takes a different
+            # dataset path in the predictor and has been observed to blow up memory on this machine.
+            remaining_list = cache / f"cpupair-{label.lower()}-remaining.txt"
+            remaining_list.write_text("\n".join(str(p.resolve()) for p in remaining), encoding="utf-8")
+            with jsonl_file.open("a" if done_ids else "w", encoding="utf-8") as out:
+                for index, pred in enumerate(
+                    model.predict(
+                        source=str(remaining_list),
+                        stream=True,
+                        imgsz=640,
+                        rect=False,
+                        batch=1,
+                        conf=0.001,
+                        iou=0.7,
+                        max_det=300,
+                        retina_masks=True,
+                        half=False,
+                        device="cpu",
+                        save=False,
+                        verbose=False,
+                    ),
+                    1,
                 ):
-                    x1, y1, x2, y2 = map(float, xyxy)
-                    rle = mask_utils.encode(np.asfortranarray(mask.astype(np.uint8)))
-                    rle["counts"] = rle["counts"].decode("ascii")
-                    predictions.append(
-                        {
-                            "image_id": image_id,
-                            "category_id": int(cls) + 1,
-                            "bbox": [x1, y1, x2 - x1, y2 - y1],
-                            "score": float(score),
-                            "segmentation": rle,
-                        }
-                    )
-                if index % 20 == 0:
-                    print(f"[PREDICT] {label}: {index}/117", flush=True)
-                del pred, masks
-                gc.collect()
+                    image_id = paths[str(Path(pred.path).resolve())]
+                    masks = pred.masks.data.cpu().numpy() if pred.masks is not None else []
+                    image_records = []
+                    for xyxy, score, cls, mask in zip(
+                        pred.boxes.xyxy.cpu().numpy(), pred.boxes.conf.cpu().numpy(), pred.boxes.cls.cpu().numpy(), masks
+                    ):
+                        x1, y1, x2, y2 = map(float, xyxy)
+                        rle = mask_utils.encode(np.asfortranarray(mask.astype(np.uint8)))
+                        rle["counts"] = rle["counts"].decode("ascii")
+                        image_records.append(
+                            {
+                                "image_id": image_id,
+                                "category_id": int(cls) + 1,
+                                "bbox": [x1, y1, x2 - x1, y2 - y1],
+                                "score": float(score),
+                                "segmentation": rle,
+                            }
+                        )
+                    predictions.extend(image_records)
+                    for record in image_records:
+                        out.write(json.dumps(record) + "\n")
+                    out.flush()
+                    if index % 10 == 0 or index == len(remaining):
+                        print(f"[PREDICT] {label}: {index}/{len(remaining)}", flush=True)
+                    del pred, masks, image_records
+                    gc.collect()
             pred_file.write_text(json.dumps(predictions), encoding="utf-8")
             del model
             gc.collect()
