@@ -1,0 +1,51 @@
+# nodsem ablation of the DSS compound (run data-v2-cmp2-nodsem).
+# Only change vs cmp1: backbone layer 2 reverts to the official C3k2 (DSEM removed).
+# The P2 cross-stage injection, the SFCM gate and the DPRM dual-resolution branch stay on.
+# Cloud launch (explicit --run-name avoids the timestamp suffix):
+#   python scripts/cloud_train_data_v2.py \
+#     --config experiments/data-v2-cmp2-nodsem-b16-s42.yaml \
+#     --pretrained yolo26m-seg.pt \
+#     --run-name data-v2-cmp2-nodsem-b16-s42
+
+experiment: data-v2-cmp2-nodsem-b16-s42
+model: ultralytics-main/ultralytics/cfg/models/26/yolo26m-dss-nodsem-seg.yaml
+data: experiments/yolo_data_v2_cloud.yaml
+
+train:
+  epochs: 300
+  patience: 100
+  batch: 16
+  nbs: 64
+  imgsz: 640
+  device: "0"
+  workers: 8
+  cache: false
+
+  optimizer: AdamW
+  lr0: 0.001667
+  lrf: 0.01
+  momentum: 0.9
+  weight_decay: 0.0005
+  warmup_epochs: 3
+  warmup_bias_lr: 0.1
+  cos_lr: false
+
+  seed: 42
+  deterministic: true
+  amp: true
+
+  mask_ratio: 2
+  mosaic: 1.0
+  mixup: 0.0
+  copy_paste: 0.3
+  degrees: 15
+  flipud: 0.5
+  fliplr: 0.5
+  scale: 0.3
+  close_mosaic: 15
+
+  val: true
+  split: val
+  plots: true
+  project: runs
+  exist_ok: false
