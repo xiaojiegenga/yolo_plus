@@ -95,10 +95,23 @@ def main() -> None:
     parser.add_argument("--candidate-weights", type=Path, required=True)
     parser.add_argument("--candidate-label", default="DSS")
     parser.add_argument("--threads", type=int, default=8)
+    parser.add_argument(
+        "--reuse-cache",
+        action="store_true",
+        help="Reuse an existing cached predictions JSON for a label instead of re-running inference",
+    )
+    parser.add_argument(
+        "--mask-chunk",
+        type=int,
+        default=32,
+        help="Detections per process_mask_native chunk; lower it when RAM is tight",
+    )
     parser.add_argument("--output", type=Path, default=ROOT / "experiment_records/evaluations/data-v2-cmp1-cpu-pair.json")
     args = parser.parse_args()
 
     sys.path.insert(0, str(args.source_root.resolve()))
+    import gc
+
     import numpy as np
     import torch
     from PIL import Image
@@ -116,7 +129,7 @@ def main() -> None:
     # per-detection elementwise ops, so chunking is mathematically identical, only memory-bounded.
     _process_mask_native_orig = ultralytics_ops.process_mask_native
 
-    def _process_mask_native_chunked(protos, masks_in, bboxes, shape, _chunk=32):
+    def _process_mask_native_chunked(protos, masks_in, bboxes, shape, _chunk=args.mask_chunk):
         n = masks_in.shape[0]
         if n <= _chunk:
             return _process_mask_native_orig(protos, masks_in, bboxes, shape)
@@ -212,47 +225,55 @@ def main() -> None:
     runs = {"000": args.baseline_weights, args.candidate_label: args.candidate_weights}
     for label, weights in runs.items():
         print(f"[LOAD] {label}: {weights}", flush=True)
-        model = YOLO(str(weights))
-        predictions = []
-        for index, pred in enumerate(
-            model.predict(
-                source=str(image_list),
-                stream=True,
-                imgsz=640,
-                rect=False,
-                batch=1,
-                conf=0.001,
-                iou=0.7,
-                max_det=300,
-                retina_masks=True,
-                half=False,
-                device="cpu",
-                save=False,
-                verbose=False,
-            ),
-            1,
-        ):
-            image_id = paths[str(Path(pred.path).resolve())]
-            masks = pred.masks.data.cpu().numpy() if pred.masks is not None else []
-            for xyxy, score, cls, mask in zip(
-                pred.boxes.xyxy.cpu().numpy(), pred.boxes.conf.cpu().numpy(), pred.boxes.cls.cpu().numpy(), masks
-            ):
-                x1, y1, x2, y2 = map(float, xyxy)
-                rle = mask_utils.encode(np.asfortranarray(mask.astype(np.uint8)))
-                rle["counts"] = rle["counts"].decode("ascii")
-                predictions.append(
-                    {
-                        "image_id": image_id,
-                        "category_id": int(cls) + 1,
-                        "bbox": [x1, y1, x2 - x1, y2 - y1],
-                        "score": float(score),
-                        "segmentation": rle,
-                    }
-                )
-            if index % 20 == 0:
-                print(f"[PREDICT] {label}: {index}/117", flush=True)
         pred_file = cache / f"cpupair-{label}-predictions.json"
-        pred_file.write_text(json.dumps(predictions), encoding="utf-8")
+        if args.reuse_cache and pred_file.exists():
+            predictions = json.loads(pred_file.read_text(encoding="utf-8"))
+            print(f"[CACHE] {label}: reusing {len(predictions)} cached predictions from {pred_file}", flush=True)
+        else:
+            model = YOLO(str(weights))
+            predictions = []
+            for index, pred in enumerate(
+                model.predict(
+                    source=str(image_list),
+                    stream=True,
+                    imgsz=640,
+                    rect=False,
+                    batch=1,
+                    conf=0.001,
+                    iou=0.7,
+                    max_det=300,
+                    retina_masks=True,
+                    half=False,
+                    device="cpu",
+                    save=False,
+                    verbose=False,
+                ),
+                1,
+            ):
+                image_id = paths[str(Path(pred.path).resolve())]
+                masks = pred.masks.data.cpu().numpy() if pred.masks is not None else []
+                for xyxy, score, cls, mask in zip(
+                    pred.boxes.xyxy.cpu().numpy(), pred.boxes.conf.cpu().numpy(), pred.boxes.cls.cpu().numpy(), masks
+                ):
+                    x1, y1, x2, y2 = map(float, xyxy)
+                    rle = mask_utils.encode(np.asfortranarray(mask.astype(np.uint8)))
+                    rle["counts"] = rle["counts"].decode("ascii")
+                    predictions.append(
+                        {
+                            "image_id": image_id,
+                            "category_id": int(cls) + 1,
+                            "bbox": [x1, y1, x2 - x1, y2 - y1],
+                            "score": float(score),
+                            "segmentation": rle,
+                        }
+                    )
+                if index % 20 == 0:
+                    print(f"[PREDICT] {label}: {index}/117", flush=True)
+                del pred, masks
+                gc.collect()
+            pred_file.write_text(json.dumps(predictions), encoding="utf-8")
+            del model
+            gc.collect()
 
         result["models"][label] = {
             "weights": str(weights),
@@ -319,7 +340,6 @@ def main() -> None:
                     }
             result["models"][label]["metrics"][kind] = per_kind
         print(f"[DONE] {label}: small leaffolder segm = {json.dumps(result['models'][label]['metrics']['segm']['1']['small'])}", flush=True)
-        del model
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
