@@ -46,6 +46,7 @@ def main() -> None:
     parser.add_argument("--batch", type=int, default=16)
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--out-prefix", type=Path, default=ROOT / "exports/test-eval")
+    parser.add_argument("--name-prefix", default="eval-cmp1", help="Ultralytics session name prefix per model")
     args = parser.parse_args()
 
     sys.path.insert(0, str(args.source_root.resolve()))
@@ -86,8 +87,8 @@ def main() -> None:
             device=args.device,
             workers=args.workers,
             half=False,
-            project="runs",
-            name=f"eval-cmp1-{split}",
+            project=str(ROOT / "runs" / "test-eval"),
+            name=f"{args.name_prefix}-{split}",
             verbose=True,
         )
         entry = {"results_dict": {k: float(v) for k, v in metrics.results_dict.items()}}
