@@ -23,6 +23,9 @@ from .block import (
     Proto,
     Proto26,
     Proto26P2,
+    Proto26DR,
+    Proto26DRNoDual,
+    Proto26DRNoP2,
     RealNVP,
     Residual,
     SwiGLUFFN,
@@ -484,6 +487,118 @@ class Segment26P2(Segment26):
         if self.training:
             return preds
         return (outputs, proto) if self.export else ((outputs[0], proto), preds)
+
+
+class Segment26DSS(Segment26):
+    """YOLO26 Segment head with DSS modules: SFCM calibration on neck P3 and the Proto26DR branch.
+
+    Detection weights (cv2/cv3/cv4) and the official prototype path are inherited unchanged from
+    Segment26/Proto26, so they transfer from the official checkpoint. The semantic branch replaces the
+    training-only Proto26.semseg head: sem_trunk reads the neck P3 feature, sem_head keeps the auxiliary
+    semantic supervision slot (loss[4]) and sem_gate produces a foreground map that calibrates P3 for both
+    the detection branch and the prototype branch. gate_scale starts at zero, so the initial forward
+    equals the baseline. Mask prototypes are emitted at stride 2 by Proto26DR using the backbone P2/4
+    feature routed through the head's from-list.
+
+    Attributes:
+        proto (Proto26DR): Dual-resolution prototype module fed by (P2, P3, P4, P5).
+        sem_trunk (Conv): Trunk computing the semantic feature from neck P3.
+        sem_head (nn.Conv2d): Per-class semantic logits for the auxiliary loss slot.
+        sem_gate (nn.Conv2d): Single-channel foreground logit.
+        gate_scale (nn.Parameter): Per-channel calibration scale, zero-initialized.
+    """
+
+    # Class-level switch so checkpoints pickled before this attribute existed (cmp1) still work:
+    # class attributes are resolved from the class, never from the pickled instance state.
+    sfcm_gate = True
+    # Class-level switch for the nodual ablation: selects the prototype variant in __init__.
+    dual_output = True
+    # Class-level switch for the nop2inj ablation: selects the prototype variant in __init__.
+    p2_inject = True
+
+    def __init__(self, nc: int = 80, nm: int = 32, npr: int = 256, reg_max=16, end2end=False, ch: tuple = ()):
+        """Initialize the head with P2 routed to the prototype branch and SFCM on neck P3.
+
+        Args:
+            nc (int): Number of classes.
+            nm (int): Number of masks.
+            npr (int): Number of protos.
+            reg_max (int): Maximum number of DFL channels.
+            end2end (bool): Whether to use end-to-end NMS-free detection.
+            ch (tuple): Channel sizes ordered as (P2, P3, P4, P5).
+        """
+        super().__init__(nc, nm, npr, reg_max, end2end, ch[1:])  # detection on P3/P4/P5
+        if not self.dual_output:
+            proto_cls = Proto26DRNoDual
+        elif not self.p2_inject:
+            proto_cls = Proto26DRNoP2
+        else:
+            proto_cls = Proto26DR
+        self.proto = proto_cls(ch, self.npr, self.nm, nc)  # protos fed by P2/4, stride 2 or 4
+        c_sem = max(self.npr // 4, 32)
+        self.sem_trunk = Conv(ch[1], c_sem, k=3)
+        self.sem_head = nn.Conv2d(c_sem, nc, 1)
+        self.sem_gate = nn.Conv2d(c_sem, 1, 1)
+        self.gate_scale = nn.Parameter(torch.zeros(ch[1]))
+
+    def forward(self, x: list[torch.Tensor]) -> tuple | list[torch.Tensor] | dict[str, torch.Tensor]:
+        """Calibrate neck P3 with the semantic gate (when enabled), then detect and build prototypes."""
+        p2, p3, p4, p5 = x
+        sem = self.sem_trunk(p3)
+        if self.sfcm_gate:
+            gate = torch.sigmoid(self.sem_gate(sem))
+            p3_cal = p3 * (1.0 + self.gate_scale.view(1, -1, 1, 1) * gate)
+        else:
+            p3_cal = p3  # nosfcm ablation: gate out of the path, auxiliary supervision kept
+        outputs = Detect.forward(self, [p3_cal, p4, p5])
+        preds = outputs[1] if isinstance(outputs, tuple) else outputs
+        proto = self.proto((p2, p3_cal, p4, p5))  # mask protos
+        if isinstance(preds, dict):  # training and validating during training
+            proto_out = (proto, self.sem_head(sem)) if self.training else proto
+            if self.end2end:
+                preds["one2many"]["proto"] = proto_out
+                preds["one2one"]["proto"] = (
+                    tuple(p.detach() for p in proto_out) if isinstance(proto_out, tuple) else proto_out.detach()
+                )
+            else:
+                preds["proto"] = proto_out
+        if self.training:
+            return preds
+        return (outputs, proto) if self.export else ((outputs[0], proto), preds)
+
+
+class Segment26DSSNoSFCM(Segment26DSS):
+    """nosfcm ablation head: the semantic foreground gate is bypassed, auxiliary supervision stays.
+
+    Identical to Segment26DSS except that P3 is passed to the detection and prototype branches
+    uncalibrated. sem_trunk and sem_head keep producing semantic logits for the auxiliary loss slot
+    (loss[4]), so this run isolates the contribution of the gate itself beyond plain auxiliary
+    semantic supervision. sem_gate and gate_scale remain in the state dict but receive no gradients.
+    """
+
+    sfcm_gate = False
+
+
+class Segment26DSSNoDual(Segment26DSS):
+    """nodual ablation head: prototypes revert to stride 4; DSEM and the SFCM gate stay on.
+
+    Only the stride-2 residual level of the prototype branch is bypassed (Proto26DRNoDual); the
+    P2 cross-stage injection keeps working, so this run isolates the dual-resolution mechanism
+    from the rest of the compound. The hi_* parameters remain in the state dict without gradients.
+    """
+
+    dual_output = False
+
+
+class Segment26DSSNoP2(Segment26DSS):
+    """nop2inj ablation head: the P2 cross-stage injection is bypassed; DSEM stays on.
+
+    The head still receives the DSEM-enhanced layer-2 feature but the prototype branch ignores
+    it (Proto26DRNoP2), so this run isolates the injection from DSEM's backbone-wide effect.
+    The SFCM gate and the dual-resolution branch are unchanged.
+    """
+
+    p2_inject = False
 
 
 class OBB(Detect):

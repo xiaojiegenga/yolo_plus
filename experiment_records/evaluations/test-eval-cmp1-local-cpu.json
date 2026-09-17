@@ -1,0 +1,116 @@
+{
+  "created_at_local": "2026-09-17T15:15:07",
+  "weights": "E:\\study\\graduate_sec\\论文撰写\\Zcode_yolo\\yolo_plus\\runs\\data-v2-cmp1-dss-b16-s42\\weights\\best.pt",
+  "data": "E:\\study\\graduate_sec\\论文撰写\\Zcode_yolo\\yolo_plus\\.cache\\data-v2-local.yaml",
+  "ultralytics": "8.4.80",
+  "torch": "2.11.0+cpu",
+  "protocol": {
+    "imgsz": 640,
+    "batch": 8,
+    "conf": 0.001,
+    "iou": 0.7,
+    "max_det": 300,
+    "half": false,
+    "device": "cpu"
+  },
+  "splits": {
+    "val": {
+      "results_dict": {
+        "metrics/precision(B)": 0.6534945789388568,
+        "metrics/recall(B)": 0.7012645249487355,
+        "metrics/mAP50(B)": 0.7367368615623735,
+        "metrics/mAP50-95(B)": 0.46035372975552996,
+        "metrics/precision(M)": 0.6311208208368804,
+        "metrics/recall(M)": 0.6895078605604921,
+        "metrics/mAP50(M)": 0.7132170736912602,
+        "metrics/mAP50-95(M)": 0.3851401676479763,
+        "fitness": 0.8454938974035062
+      },
+      "save_dir": "E:\\study\\graduate_sec\\论文撰写\\Zcode_yolo\\yolo_plus\\runs\\segment\\runs\\eval-cmp1-val",
+      "per_class": {
+        "Rice leaffolder": {
+          "box P/R/mAP50/mAP50-95": [
+            0.64642,
+            0.70779,
+            0.73279,
+            0.41135
+          ],
+          "mask P/R/mAP50/mAP50-95": [
+            0.6172,
+            0.69481,
+            0.704,
+            0.33288
+          ]
+        },
+        "Rice stemborers": {
+          "box P/R/mAP50/mAP50-95": [
+            0.66057,
+            0.69474,
+            0.74068,
+            0.50936
+          ],
+          "mask P/R/mAP50/mAP50-95": [
+            0.64504,
+            0.68421,
+            0.72243,
+            0.4374
+          ]
+        }
+      },
+      "reproduction_check": {
+        "metrics/mAP50(M)": {
+          "recorded": 0.71687,
+          "this_run": 0.7132170736912602
+        },
+        "metrics/mAP50-95(M)": {
+          "recorded": 0.38929,
+          "this_run": 0.3851401676479763
+        }
+      }
+    },
+    "test": {
+      "results_dict": {
+        "metrics/precision(B)": 0.6292070407340565,
+        "metrics/recall(B)": 0.6605116274897574,
+        "metrics/mAP50(B)": 0.6612228733943581,
+        "metrics/mAP50-95(B)": 0.41049869560580304,
+        "metrics/precision(M)": 0.6477116560173967,
+        "metrics/recall(M)": 0.6738656080761344,
+        "metrics/mAP50(M)": 0.6897005144033984,
+        "metrics/mAP50-95(M)": 0.36128596742750385,
+        "fitness": 0.771784663033307
+      },
+      "save_dir": "E:\\study\\graduate_sec\\论文撰写\\Zcode_yolo\\yolo_plus\\runs\\segment\\runs\\eval-cmp1-test",
+      "per_class": {
+        "Rice leaffolder": {
+          "box P/R/mAP50/mAP50-95": [
+            0.60719,
+            0.60287,
+            0.6361,
+            0.36384
+          ],
+          "mask P/R/mAP50/mAP50-95": [
+            0.61381,
+            0.60048,
+            0.63627,
+            0.28347
+          ]
+        },
+        "Rice stemborers": {
+          "box P/R/mAP50/mAP50-95": [
+            0.65122,
+            0.71815,
+            0.68634,
+            0.45716
+          ],
+          "mask P/R/mAP50/mAP50-95": [
+            0.68161,
+            0.74725,
+            0.74313,
+            0.4391
+          ]
+        }
+      }
+    }
+  }
+}

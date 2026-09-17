@@ -1,0 +1,116 @@
+{
+  "created_at_local": "2026-09-17T15:39:23",
+  "weights": "/root/yolo_plus/runs/data-v2-cmp1-dss-b16-s42-20260915-223450/weights/best.pt",
+  "data": "/root/yolo_plus/experiments/yolo_data_v2_cloud.yaml",
+  "ultralytics": "8.4.80",
+  "torch": "2.12.1+cu130",
+  "protocol": {
+    "imgsz": 640,
+    "batch": 16,
+    "conf": 0.001,
+    "iou": 0.7,
+    "max_det": 300,
+    "half": false,
+    "device": "0"
+  },
+  "splits": {
+    "val": {
+      "results_dict": {
+        "metrics/precision(B)": 0.6542010869926186,
+        "metrics/recall(B)": 0.7012645249487355,
+        "metrics/mAP50(B)": 0.7367734373692688,
+        "metrics/mAP50-95(B)": 0.4606887853063557,
+        "metrics/precision(M)": 0.6332982355564245,
+        "metrics/recall(M)": 0.6788334472544999,
+        "metrics/mAP50(M)": 0.705897236720918,
+        "metrics/mAP50-95(M)": 0.3723909458707022,
+        "fitness": 0.8330797311770579
+      },
+      "save_dir": "/root/yolo_plus/runs/test-eval/eval-cmp1-val",
+      "per_class": {
+        "Rice leaffolder": {
+          "box P/R/mAP50/mAP50-95": [
+            0.64661,
+            0.70779,
+            0.73296,
+            0.41136
+          ],
+          "mask P/R/mAP50/mAP50-95": [
+            0.62486,
+            0.68398,
+            0.69802,
+            0.32847
+          ]
+        },
+        "Rice stemborers": {
+          "box P/R/mAP50/mAP50-95": [
+            0.6618,
+            0.69474,
+            0.74058,
+            0.51001
+          ],
+          "mask P/R/mAP50/mAP50-95": [
+            0.64174,
+            0.67368,
+            0.71377,
+            0.41631
+          ]
+        }
+      },
+      "reproduction_check": {
+        "metrics/mAP50(M)": {
+          "recorded": 0.71687,
+          "this_run": 0.705897236720918
+        },
+        "metrics/mAP50-95(M)": {
+          "recorded": 0.38929,
+          "this_run": 0.3723909458707022
+        }
+      }
+    },
+    "test": {
+      "results_dict": {
+        "metrics/precision(B)": 0.6299293005150238,
+        "metrics/recall(B)": 0.6573820915926178,
+        "metrics/mAP50(B)": 0.662160540882946,
+        "metrics/mAP50-95(B)": 0.41001009417600126,
+        "metrics/precision(M)": 0.6436067011864386,
+        "metrics/recall(M)": 0.6726694358273306,
+        "metrics/mAP50(M)": 0.6896386266437367,
+        "metrics/mAP50-95(M)": 0.35216019899137896,
+        "fitness": 0.7621702931673802
+      },
+      "save_dir": "/root/yolo_plus/runs/test-eval/eval-cmp1-test",
+      "per_class": {
+        "Rice leaffolder": {
+          "box P/R/mAP50/mAP50-95": [
+            0.61416,
+            0.60048,
+            0.63614,
+            0.36368
+          ],
+          "mask P/R/mAP50/mAP50-95": [
+            0.61171,
+            0.59809,
+            0.63049,
+            0.27559
+          ]
+        },
+        "Rice stemborers": {
+          "box P/R/mAP50/mAP50-95": [
+            0.6457,
+            0.71429,
+            0.68818,
+            0.45634
+          ],
+          "mask P/R/mAP50/mAP50-95": [
+            0.6755,
+            0.74725,
+            0.74878,
+            0.42873
+          ]
+        }
+      }
+    }
+  }
+}
