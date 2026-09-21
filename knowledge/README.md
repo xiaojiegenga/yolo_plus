@@ -4,11 +4,11 @@
 
 数据背景入口：[水稻虫害数据集特征与使用约定](水稻虫害数据集特征与使用约定.md)，汇总约 3 米无人机航拍、两类标签、数据划分、细长小面积目标统计及评估口径；后续设计和分析优先查阅此文。
 
-当前训练入口：[F2：局部特征引导条带门控](改进F2-局部引导条带门控原理与实现.md)。源码与配置位于独立 `feature/data-v2-abl-f2-localgate` 分支；本地验证已通过，云端预检和正式精度待测。原 F 正式结果见 [F 结果分析](../experiment_records/runs/data-v2-abl-f-p3strip-b16-s42.md)。
+当前最终模型：[DSS 三位置复合（DSEM + SFCM + DPRM）](复合结构改进设计方案-DSS三位置复合.md)。实验阶段已收官：Val Mask mAP50-95 0.38929（较 000 +2.58 pp），四组留一消融全部通过，Test 终评 0.35216（+1.73 pp）；正式结果见 [DSS 单次记录](../experiment_records/runs/data-v2-cmp1-dss-b16-s42.md) 与 [Test 终评记录](Test终评记录-data-v2-cmp1.md)。
 
 前期讨论见 [结构改进方向与对话交接（2026-09-09）](结构改进方向与对话交接-2026-09-09.md)，包括第 4 层 SCSA、DRB、Neck/Head、局部复核备选及 Baseline 复现核查结论。
 
-后续计划见 [改进 F 后续方向与实验计划](改进F后续方向与实验计划.md)：首选 F2 局部特征引导条带门控，备选 F3 仅用于掩膜原型的条带上下文；F2 已实现并完成本地验证，F3 仍为 PLAN。
+后续计划见 [改进 F 后续方向与实验计划](改进F后续方向与实验计划.md)：首选 F2 局部特征引导条带门控，备选 F3 仅用于掩膜原型的条带上下文。F2 已完成并验证（204 epoch 早停，0.34733，未通过门控），F3 未执行；P3 条带/朝向方向已关闭。
 
 | 文档 | 源码位置 | 内容 |
 |---|---|---|
@@ -18,10 +18,17 @@
 | [改进 D1：P2 高分辨率掩码原型](改进D1-P2高分辨率掩码原型原理与实现.md) | `feature/data-v2-abl-d-p2proto` | 掩码原型从 stride 4 提升到 stride 2；正式主指标 +0.00979，保留候选 |
 | [改进 E：DySample 动态上采样](改进E-DySample动态上采样原理与实现.md) | `feature/data-v2-abl-e-dysample` | 两处 Neck 上采样；正式实验主指标下降 0.01699，未通过门控 |
 | [改进 F：P3 局部与条带上下文](改进F-P3局部与条带上下文原理与实现.md) | `feature/data-v2-abl-f-p3strip` | 数据几何、逐层计算、深度卷积与残差理论、源码映射、云端训练命令 |
-| [局部分类复核头：文献方案](改进F-局部分类复核头的文献依据与验证方案.md) | 方案资料 | 历史实验复盘、标注几何与误检诊断、DCR 文献依据、结构及短验证方案 |
+| [改进 F2：局部引导条带门控](改进F2-局部引导条带门控原理与实现.md) | `feature/data-v2-abl-f2-localgate` | F 的横纵空间门设计；正式 204 epoch 早停，0.34733，未通过门控 |
+| [局部分类复核头：文献方案](改进F-局部分类复核头的文献依据与验证方案.md) | 方案资料 | 历史实验复盘、标注几何与误检诊断、DCR 文献依据、结构及短验证方案；后续 H 已搁置 |
+| [复合结构改进设计：DSS 三位置复合](复合结构改进设计方案-DSS三位置复合.md) | `feature/data-v2-cmp-dss` | 当前最终模型的组份设计、证据依据与消融归因 |
+| [消融实验设计与登记表](消融实验设计与登记表.md) | `feature/data-v2-cmp-dss` | DSS 四组留一消融的登记与机制分析 |
+| [云端训练与回传命令](云端训练与回传命令.md) | 操作手册 | 云端拉取、预检、训练、打包与回传命令 |
 
 B 文档从 `feature/data-v2-abl-b-dice` 的 `cef6b0b` 原样复制，其中的损失源码、测试和
 训练配置路径对应 B 分支。总体分析分支保留 A 源码，B 的独立实现仍由 B 分支保存。
 
 知识文档用于解释设计；实际训练结论以 [A、B 改进完成总结](../experiment_records/data-v2-ab-summary.md)
 和其中链接的正式 Run 记录为准。C 已完成，见 [C 正式记录](../experiment_records/runs/data-v2-abl-001-p2head-b16-s42.md) 与 [小目标专项评估](../experiment_records/evaluations/data-v2-c-small-val.md)。A2 的结构、参数与结果见 [A2 正式记录](../experiment_records/runs/data-v2-abl-a2-p3-zrcbam-b16-s42.md)。
+F2、G 与 DRB/SCSA 均为正式负结果，记录见 [F2](../experiment_records/runs/data-v2-abl-f2-localgate-b16-s42.md)、
+[G](../experiment_records/runs/data-v2-abl-g-oristrip-b16-s42.md)、[DRB/SCSA](../experiment_records/runs/data-v2-abl-drb-scsa-p34-b16-s42.md)。
+最终模型的全部数值以 [实验总表](../云服务器实验设计与记录表.md) 表 22 与 [DSS 单次记录](../experiment_records/runs/data-v2-cmp1-dss-b16-s42.md) 为准。

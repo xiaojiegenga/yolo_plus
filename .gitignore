@@ -31,6 +31,7 @@ env/
 /runs_seg/
 /results/
 /weights/
+/DSS讲解配图/
 
 # Outputs accidentally created inside the source tree
 /ultralytics-main/runs/

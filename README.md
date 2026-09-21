@@ -6,9 +6,15 @@
 独立 B 分支 `feature/data-v2-abl-b-dice` 的完整 Run 已回传并核验，本次 Dice 未通过门控。
 C 分支 `feature/data-v2-abl-c-p2head` 已完成 300 epoch 并核验，best epoch 282；本次轻量 P2Head 未通过门控。
 
-D1 训练分支为 `feature/data-v2-abl-d-p2proto`，已完成 300 epoch；Mask mAP50-95=0.37327，较 000 +0.00979，保留候选。详见 [D1 正式分析](experiment_records/runs/data-v2-abl-d1-p2proto-r2-b16-s42.md)。
+D1 训练分支为 `feature/data-v2-abl-d-p2proto`，已完成 300 epoch；Mask mAP50-95=0.37327，较 000 +0.00979。
 配置位于 D 分支 `experiments/data-v2-abl-d1-p2proto-r2-b16-s42.yaml`。
-当前待训练的是 F2：局部特征引导条带门控，源码位于 `feature/data-v2-abl-f2-localgate`；云端步骤见 [实验步骤](实验步骤.md)。
+F2（局部特征引导条带门控，分支 `feature/data-v2-abl-f2-localgate`）已完成并核验：204 epoch 早停，
+best epoch 104，Mask mAP50-95=0.34733，未通过门控；详见 [F2 正式记录](experiment_records/runs/data-v2-abl-f2-localgate-b16-s42.md)。
+
+**实验阶段已收官，当前最终模型为 DSS 三位置复合**（DSEM + SFCM + DPRM，Run `data-v2-cmp1-dss-b16-s42`）：
+Val Mask mAP50-95 **0.38929**（较 000 +2.58 pp），四组留一消融全部通过，Test 终评 0.35216（+1.73 pp）。
+完整结果见 [实验总表](云服务器实验设计与记录表.md) 表 22 与 [DSS 正式记录](experiment_records/runs/data-v2-cmp1-dss-b16-s42.md)；
+下一步为论文写作。详见 [当前进展](PROGRESS.md)。
 
 ## 工作模式
 
@@ -78,7 +84,10 @@ python scripts/fill_results_table.py --help
 - `D1 P2Proto`：D 分支 `experiments/data-v2-abl-d1-p2proto-r2-b16-s42.yaml`（已完成，best epoch 278；保留候选）
 - `E DySample`：E 分支 `experiments/data-v2-abl-e-dysample-b16-s42.yaml`（已完成，best epoch 264；未通过门控）
 - `F P3Strip`：`feature/data-v2-abl-f-p3strip` 分支（已完成，best epoch 237；未通过门控）
-- `F2 LocalGate`：F2 分支 `experiments/data-v2-abl-f2-localgate-b16-s42.yaml`（实现与本地检查完成；待训练）
+- `F2 LocalGate`：F2 分支 `experiments/data-v2-abl-f2-localgate-b16-s42.yaml`（已完成，204 epoch 早停，best epoch 104；未通过门控）
+- `G OriStrip`：`feature/data-v2-abl-g-oristrip` 分支（已完成，best epoch 206；未通过门控）
+- `DSS 复合（最终模型）`：`experiments/data-v2-cmp1-dss-b16-s42.yaml`（已完成，best epoch 219；通过门控并冻结）
+- `DSS 留一消融`：`experiments/data-v2-cmp2-{nodual,nodsem,nop2inj,nosfcm}-b16-s42.yaml`（四组均已完成；登记见 `knowledge/消融实验设计与登记表.md`）
 - 云端数据：`experiments/yolo_data_v2_cloud.yaml`
 - 默认数据根目录：`/root/yolo_data`
 

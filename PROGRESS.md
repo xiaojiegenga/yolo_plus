@@ -46,13 +46,14 @@
 
 ## 改进 F2 当前状态
 
-- F2 局部特征引导条带门控已实现，独立分支 `feature/data-v2-abl-f2-localgate`，基于原 F `1590ccd`。
+- F2 局部特征引导条带门控已实现，独立分支 `feature/data-v2-abl-f2-localgate`，基于原 F `1590ccd`，实际训练提交 `c13cef0`。
 - 正式配置 `experiments/data-v2-abl-f2-localgate-b16-s42.yaml`；Run ID 同名，官方预训练初始化，冻结配方不变。
 - F2 7 项功能检查和原 F 6 项回归通过；官方权重 80→2 类迁移、640 初始预测与训练入口 dry-run 通过。
 - 相对原 F 增加 130 参数，融合参数 23,576,660。
-- 正式 Run `data-v2-abl-f2-localgate-b16-s42` 已完成并回传，204 epoch 早停（patience=100），best epoch 104；best 行 Mask mAP50 / mAP50-95=0.70155 / 0.34733，official fitness 0.79673，较 000 低 0.01615。已登记总表表 4 与表 21。
-- **F2 的正式分析记录尚未建立**，`experiment_records/runs/data-v2-abl-f2-localgate-b16-s42.md` 缺失；回传 Run 与训练日志已在本机 `runs/` 下，分析待补。
-- [F2 原理与实现](knowledge/改进F2-局部引导条带门控原理与实现.md)。
+- 正式 Run `data-v2-abl-f2-localgate-b16-s42` 已完成并回传，204 epoch 早停（patience=100），best epoch 104；best 行 Mask mAP50 / mAP50-95=0.70155 / 0.34733，official fitness 0.79673，较 000 低 0.01615 / 0.02304。
+- 负向不只在单个轮次：top-10 fitness 均值 0.777970，较 000 低 0.026658，差额大于同窗口单轮波动中位数 0.00975；检测框与掩膜两类 P/R/mAP 全部低于 Baseline，Mask R 下降 0.04201。
+- `best.pt` 932 个张量全部有限；门控卷积（2×64×1×1，absmax 0.311768）与 1×1 投影（49,152 个元素）全部非零，属"有学习、无收益"，不是模块未生效。
+- 正式分析与权重核验见 [F2 单次记录](experiment_records/runs/data-v2-abl-f2-localgate-b16-s42.md)，已登记 `comparison.csv` 与总表表 4、表 17、表 21；原理见 [F2 教材](knowledge/改进F2-局部引导条带门控原理与实现.md)。
 
 ## 改进 F 当前状态
 
@@ -90,6 +91,14 @@
 - F 候选为 DCR 思路的局部分类复核头：同一 640 输入中的候选区域→96×96→独立 YOLO 前五层→三分类；尺寸检查通过，新增 1,224,515 参数，每候选 THOP 约 0.524 GFLOPs，实际延迟待测。
 - 建议先固定主模型、仅用 Train 训练新分支并在 Val 验证，之后再决定正式消融。完整 F 未实现、未训练；D1 仍是唯一保留的正向结构。
 - [文献、证据与具体方案](knowledge/改进F-局部分类复核头的文献依据与验证方案.md)；[诊断结果](experiment_records/evaluations/data-v2-mask-quality-diagnostic.json)。
+
+## 改进 H（搁置，不执行）
+
+- H 把上述局部分类复核思路落到已训练的 D1 上：独立分支 `feature/data-v2-abl-h-localrefine`（源码提交 `b99ad3c`，工作树根目录 `E:/Wave/yolo_plus-h-localrefine`），实现、知识文档与本地检查齐备，`runs/` 为空，云端未运行。
+- 结构：D1 全冻结，Train 图片以 conf=0.25 生成 NMS 后候选，按 IoU≥0.5 标虫类、最大 IoU<0.1 标背景、其余忽略；`LocalCropRefiner` 深拷贝 D1 前五层作特征提取加三分类头，1,224,515 参数，20 epoch、crop batch 128、AdamW lr 1e-4、seed 42。推理只更新 `conf`：`s_final = s_D1 × p_refiner(c)`，不改类别、框、掩膜系数或掩膜。
+- 预注册验收门槛为 Val Mask mAP50-95 ≥ 0.37827、原图尺寸指标 > 0.34814 且原图低重叠高置信候选比例由 21.41% 下降。
+- **搁置理由**：H 的作用对象是 D1，而 D1 的原型分支已被 DSS 复合中的 DPRM 吸收并重训，当前最终模型为 `data-v2-cmp1-dss-b16-s42`（0.38929）；H 无法找回漏检、也不改善框或掩膜几何，其原定门槛已不对应当前模型位置。用户决定不执行。
+- 源码、配置与知识文档保留在独立分支 `feature/data-v2-abl-h-localrefine`；总体分析分支仅保留本条搁置登记，不新增 Run、不进入 `comparison.csv`。
 
 ## 改进 E 当前状态
 
@@ -295,13 +304,13 @@ Run ID：`data-v2-tune-mr2-nomix-e300-b16-s42`，相对当前最优 P1 `data-v2-
 
 ## 下一步
 
-1. 000、A1、A2、B、C、D1、E、F、F2、G、DRB/SCSA 十一组正式结果均已回传；D1 保留为当前唯一正向候选。
+1. 000、A1、A2、B、C、D1、E、F、F2、G、DRB/SCSA 十一组正式结果均已回传；D1 保留为单模块阶段唯一正向候选，最终模型为 DSS 复合（0.38929）。
 2. G 未通过门控，P3 条带/朝向方向（F、F2、G）已关闭，后续结构改进不再在该方向加码。
-3. F2 的正式分析记录待补，Run 与日志已在本机；补齐后并入 comparison.csv 与单次记录目录。
+3. F2 正式记录已补齐（204 epoch 早停，best 104，0.34733，未通过门控），已并入 `comparison.csv` 与单次记录目录；改进 H 作为搁置候选登记，不执行。
 4. 固定数据集与训练配方；不以数据集排查为前置条件。
 5. 不自动启动组合或重复训练；重新设计任一模块须使用新 Run ID。
 6. 读取 D checkpoint 时使用包含 D 类定义的源码；本地解释器使用当前电脑已配置的 Python 环境。
-7. Val 用于选方案；Test 保留到最终模型与阈值冻结后统一评估。
+7. Val 用于选方案；Test 已在最终模型冻结后完成一次统一评估（000 0.33490 → DSS 0.35216）。
 
 ## Git 与本地文件状态
 
