@@ -13,7 +13,7 @@ import numpy as np
 import torch
 import torch.nn.functional as nn_functional
 import yaml
-from PIL import Image, ImageDraw
+from PIL import Image
 from pycocotools import mask as mask_utils
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
@@ -75,12 +75,9 @@ class RicePestCocoDataset(Dataset):
         labels: list[int] = []
         masks: list[torch.Tensor] = []
         for annotation in self.annotations[image_id]:
-            mask_image = Image.new("L", (width, height), 0)
-            draw = ImageDraw.Draw(mask_image)
-            for polygon in annotation["segmentation"]:
-                points = list(zip(polygon[::2], polygon[1::2]))
-                draw.polygon(points, fill=1)
-            mask = torch.from_numpy(np.array(mask_image, dtype=np.uint8))
+            mask = torch.from_numpy(
+                np.ascontiguousarray(self.coco.annToMask(annotation), dtype=np.uint8)
+            )
             if not mask.any():
                 raise ValueError(f"Empty instance mask: {image_path}")
             x, y, box_width, box_height = annotation["bbox"]
