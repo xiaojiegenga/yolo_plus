@@ -1,0 +1,22 @@
+experiment: data-v2-table5-maskrcnn-r50-b4-s42
+model: maskrcnn_resnet50_fpn
+pretrained: MaskRCNN_ResNet50_FPN_Weights.DEFAULT
+data_root: /root/yolo_data
+annotations: data/table5/annotations
+
+train:
+  epochs: 300
+  patience: 100
+  batch: 4
+  accumulate: 4
+  imgsz: 640
+  workers: 8
+  optimizer: AdamW
+  lr0: 0.001667
+  lrf: 0.01
+  weight_decay: 0.0005
+  seed: 42
+  amp: true
+  fliplr: 0.5
+  flipud: 0.5
+  project: runs
