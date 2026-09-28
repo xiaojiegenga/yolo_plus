@@ -41,7 +41,7 @@ METRIC_COLUMNS = (
 
 
 class RicePestCocoDataset(Dataset):
-    """Load original images and rasterize each YOLO-derived COCO polygon."""
+    """Load images resized to the training scale and rasterize each YOLO-derived COCO polygon."""
 
     def __init__(
         self,
@@ -50,12 +50,14 @@ class RicePestCocoDataset(Dataset):
         *,
         fliplr: float = 0.0,
         flipud: float = 0.0,
+        image_size: int = 640,
     ) -> None:
         self.image_root = image_root
         self.coco = COCO(str(annotation_file))
         self.image_ids = sorted(self.coco.getImgIds())
         self.fliplr = fliplr
         self.flipud = flipud
+        self.image_size = image_size
         self.annotations: dict[int, list[dict[str, Any]]] = defaultdict(list)
         for annotation in self.coco.dataset["annotations"]:
             self.annotations[annotation["image_id"]].append(annotation)
@@ -69,20 +71,45 @@ class RicePestCocoDataset(Dataset):
         image_path = self.image_root / info["file_name"]
         with Image.open(image_path) as source:
             image = source.convert("RGB")
-        width, height = image.size
+        orig_width, orig_height = image.size
+        # Pin the longer side to image_size so the model's internal resize stays an identity.
+        if orig_width >= orig_height:
+            width = self.image_size
+            height = max(1, round(orig_height * self.image_size / orig_width))
+        else:
+            height = self.image_size
+            width = max(1, round(orig_width * self.image_size / orig_height))
+        image = image.resize((width, height), Image.BILINEAR)
+        scale_x = width / orig_width
+        scale_y = height / orig_height
 
         boxes: list[list[float]] = []
         labels: list[int] = []
+        areas: list[float] = []
         masks: list[torch.Tensor] = []
         for annotation in self.annotations[image_id]:
+            polygon = annotation["segmentation"][0]
+            scaled_polygon = [
+                coordinate * (scale_x if position % 2 == 0 else scale_y)
+                for position, coordinate in enumerate(polygon)
+            ]
+            rle = mask_utils.merge(mask_utils.frPyObjects([scaled_polygon], height, width))
             mask = torch.from_numpy(
-                np.ascontiguousarray(self.coco.annToMask(annotation), dtype=np.uint8)
+                np.ascontiguousarray(mask_utils.decode(rle), dtype=np.uint8)
             )
             if not mask.any():
-                raise ValueError(f"Empty instance mask: {image_path}")
+                continue
             x, y, box_width, box_height = annotation["bbox"]
-            boxes.append([x, y, x + box_width, y + box_height])
+            boxes.append(
+                [
+                    x * scale_x,
+                    y * scale_y,
+                    (x + box_width) * scale_x,
+                    (y + box_height) * scale_y,
+                ]
+            )
             labels.append(annotation["category_id"])
+            areas.append(annotation["area"])
             masks.append(mask)
 
         target: dict[str, torch.Tensor] = {
@@ -92,10 +119,8 @@ class RicePestCocoDataset(Dataset):
                 torch.stack(masks) if masks else torch.zeros((0, height, width), dtype=torch.uint8)
             ),
             "image_id": torch.tensor(image_id, dtype=torch.int64),
-            "area": torch.tensor(
-                [annotation["area"] for annotation in self.annotations[image_id]],
-                dtype=torch.float32,
-            ),
+            "orig_size": torch.tensor([orig_height, orig_width], dtype=torch.int64),
+            "area": torch.tensor(areas, dtype=torch.float32),
             "iscrowd": torch.zeros(len(labels), dtype=torch.int64),
         }
         image_tensor = pil_to_tensor(image).float().div_(255)
@@ -146,11 +171,25 @@ def evaluate(
                 outputs = model([image.to(device) for image in images])
             for image, target, output in zip(images, targets, outputs):
                 image_id = int(target["image_id"])
-                height, width = image.shape[-2:]
+                orig_height, orig_width = target["orig_size"].tolist()
+                scale_x = orig_width / image.shape[-1]
+                scale_y = orig_height / image.shape[-2]
                 scores = output["scores"].cpu()
-                boxes = output["boxes"].cpu()
                 labels = output["labels"].cpu()
-                masks = output["masks"].cpu()
+                boxes = output["boxes"].cpu()
+                boxes[:, [0, 2]] *= scale_x
+                boxes[:, [1, 3]] *= scale_y
+                if len(output["masks"]):
+                    # Map masks back to the original image scale before COCO submission.
+                    masks = nn_functional.interpolate(
+                        output["masks"].float(),
+                        size=(orig_height, orig_width),
+                        mode="bilinear",
+                        align_corners=False,
+                    )
+                    masks = (masks[:, 0] >= 0.5).to(torch.uint8).cpu()
+                else:
+                    masks = output["masks"].cpu()
                 for prediction_index in range(min(len(scores), 100)):
                     score = float(scores[prediction_index])
                     if score < 0.001:
@@ -164,15 +203,7 @@ def evaluate(
                     box_results.append(
                         {**common, "bbox": [x0, y0, x1 - x0, y1 - y0]}
                     )
-                    mask = masks[prediction_index, 0]
-                    if mask.shape != (height, width):
-                        mask = nn_functional.interpolate(
-                            mask[None, None],
-                            size=(height, width),
-                            mode="bilinear",
-                            align_corners=False,
-                        )[0, 0]
-                    binary_mask = np.asfortranarray((mask >= 0.5).numpy().astype(np.uint8))
+                    binary_mask = np.asfortranarray(masks[prediction_index].numpy())
                     segmentation = mask_utils.encode(binary_mask)
                     segmentation["counts"] = segmentation["counts"].decode("ascii")
                     mask_results.append({**common, "segmentation": segmentation})
@@ -249,9 +280,12 @@ def main() -> None:
         annotation_root / "train.json",
         fliplr=float(train_config["fliplr"]),
         flipud=float(train_config["flipud"]),
+        image_size=int(train_config["imgsz"]),
     )
     val_dataset = RicePestCocoDataset(
-        data_root / "images", annotation_root / "val.json"
+        data_root / "images",
+        annotation_root / "val.json",
+        image_size=int(train_config["imgsz"]),
     )
     if len(train_dataset) != 938 or len(val_dataset) != 117:
         raise ValueError("Expected data-v2 train/val image counts: 938/117")
