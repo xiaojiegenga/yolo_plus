@@ -60,7 +60,10 @@ class RicePestCocoDataset(Dataset):
         self.image_size = image_size
         self.annotations: dict[int, list[dict[str, Any]]] = defaultdict(list)
         for annotation in self.coco.dataset["annotations"]:
-            self.annotations[annotation["image_id"]].append(annotation)
+            # COCOeval rewrites GT segmentations in place; keep private polygon copies.
+            record = dict(annotation)
+            record["segmentation"] = [list(polygon) for polygon in annotation["segmentation"]]
+            self.annotations[record["image_id"]].append(record)
 
     def __len__(self) -> int:
         return len(self.image_ids)
