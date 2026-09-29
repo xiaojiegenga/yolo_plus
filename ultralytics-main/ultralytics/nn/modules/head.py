@@ -546,7 +546,7 @@ class Segment26DSS(Segment26):
         p2, p3, p4, p5 = x
         sem = self.sem_trunk(p3)
         if self.sfcm_gate:
-            gate = torch.sigmoid(self.sem_gate(sem))
+            gate = self.compute_gate(p3, sem)
             p3_cal = p3 * (1.0 + self.gate_scale.view(1, -1, 1, 1) * gate)
         else:
             p3_cal = p3  # nosfcm ablation: gate out of the path, auxiliary supervision kept
@@ -565,6 +565,55 @@ class Segment26DSS(Segment26):
         if self.training:
             return preds
         return (outputs, proto) if self.export else ((outputs[0], proto), preds)
+
+    def compute_gate(self, p3: torch.Tensor, sem: torch.Tensor) -> torch.Tensor:
+        """SFCM gate: single-channel foreground map from the shared semantic feature."""
+        return torch.sigmoid(self.sem_gate(sem))
+
+
+class Segment26DSSSE(Segment26DSS):
+    """cmp3 SE variant: SE channel attention replaces the SFCM gate, everything else unchanged.
+
+    DSEM, DPRM and the auxiliary semantic supervision (sem_trunk/sem_head, loss slot unchanged) stay
+    identical to Segment26DSS; only the gate source differs. Squeeze-and-excitation channel weights
+    on P3 (reduction 16) replace the semantic foreground map and feed the same residual calibration
+    path with the zero-initialized gate_scale, so the initial forward equals the ungated model.
+    """
+
+    def __init__(self, nc: int = 80, nm: int = 32, npr: int = 256, reg_max=16, end2end=False, ch: tuple = ()):
+        """Initialize the head and swap the semantic gate conv for the SE block."""
+        super().__init__(nc, nm, npr, reg_max, end2end, ch)
+        del self.sem_gate  # unused here; sem_head keeps the auxiliary supervision slot
+        c3, r = ch[1], 16
+        self.se_fc = nn.Sequential(nn.Linear(c3, c3 // r), nn.ReLU(inplace=True), nn.Linear(c3 // r, c3))
+
+    def compute_gate(self, p3: torch.Tensor, sem: torch.Tensor) -> torch.Tensor:
+        """Channel attention weights (B,C,1,1) from squeeze-excitation on P3."""
+        return self.se_fc(p3.mean(dim=(2, 3))).sigmoid().view(p3.shape[0], -1, 1, 1)
+
+
+class Segment26DSSCBAM(Segment26DSS):
+    """cmp3 CBAM variant: CBAM channel+spatial attention replaces the SFCM gate, everything else unchanged.
+
+    Channel attention shares one MLP over avg- and max-pooled descriptors (reduction 16); spatial
+    attention uses a 7x7 conv over channel-wise avg/max maps, following the original CBAM design.
+    The combined multiplicative weight map replaces the semantic gate in the same zero-initialized
+    residual calibration path.
+    """
+
+    def __init__(self, nc: int = 80, nm: int = 32, npr: int = 256, reg_max=16, end2end=False, ch: tuple = ()):
+        """Initialize the head and swap the semantic gate conv for the CBAM block."""
+        super().__init__(nc, nm, npr, reg_max, end2end, ch)
+        del self.sem_gate  # unused here; sem_head keeps the auxiliary supervision slot
+        c3, r = ch[1], 16
+        self.ca_mlp = nn.Sequential(nn.Linear(c3, c3 // r), nn.ReLU(inplace=True), nn.Linear(c3 // r, c3))
+        self.sa_conv = nn.Conv2d(2, 1, kernel_size=7, padding=3)
+
+    def compute_gate(self, p3: torch.Tensor, sem: torch.Tensor) -> torch.Tensor:
+        """Combined channel+spatial attention weights (B,C,H,W) on P3."""
+        m_c = torch.sigmoid(self.ca_mlp(p3.mean(dim=(2, 3))) + self.ca_mlp(p3.amax(dim=(2, 3))))
+        sp = torch.cat([p3.mean(dim=1, keepdim=True), p3.amax(dim=1, keepdim=True)], dim=1)
+        return m_c.view(p3.shape[0], -1, 1, 1) * torch.sigmoid(self.sa_conv(sp))
 
 
 class Segment26DSSNoSFCM(Segment26DSS):
