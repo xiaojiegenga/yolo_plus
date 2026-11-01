@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>基于深度学习的水稻害虫实例分割检测系统 V1.0</title>
+  <!-- 页签图标：内嵌 SVG 表情，避免额外文件请求 -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌾</text></svg>" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <!-- ======================= 页头：软件名称与环境信息 ======================= -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">🌾</span>
+      <div class="brand-text">
+        <h1>基于深度学习的水稻害虫实例分割检测系统</h1>
+        <p>基于改进实例分割网络（DSS：DSEM + SFCM + DPRM）· V1.0</p>
+      </div>
+    </div>
+    <!-- 能力标签 chips，由 app.js 请求 /api/info 后填充 -->
+    <div class="meta" id="meta-chips"></div>
+  </header>
+
+  <main class="layout">
+
+    <!-- ======================= 左栏：上传与参数 ======================= -->
+    <section class="panel">
+
+      <h2><span class="step-no">1</span> 上传待检测图片</h2>
+
+      <!-- 拖拽 / 点击 / 粘贴 三种方式均可选图，行为在 app.js 中绑定 -->
+      <div id="dropzone" class="dropzone" tabindex="0">
+        <div class="dz-inner">
+          <div class="dz-icon">🖼️</div>
+          <p class="dz-main">拖拽图片到此处，或 <span class="link">点击选择文件</span></p>
+          <p class="dz-sub">也可以直接按 Ctrl + V 粘贴截图 · 支持 jpg / png / bmp / webp · 最大 20MB</p>
+        </div>
+      </div>
+      <!-- 真正的文件选择框，保持隐藏，由 dropzone 代理触发 -->
+      <input type="file" id="file-input" accept="image/*" hidden />
+
+      <h2><span class="step-no">2</span> 或使用示例图片</h2>
+      <div id="samples" class="samples">
+        <p class="hint">加载中……</p>
+      </div>
+
+      <h2><span class="step-no">3</span> 检测参数</h2>
+      <div class="param">
+        <div class="param-head">
+          <label for="conf">置信度阈值</label>
+          <output id="conf-val" for="conf">0.15</output>
+        </div>
+        <input type="range" id="conf" min="0.05" max="0.90" step="0.05" value="0.15" />
+        <div class="param-scale"><span>0.05（召回优先）</span><span>0.90（精度优先）</span></div>
+      </div>
+
+      <button id="detect-btn" class="btn primary" disabled>开始检测</button>
+      <p id="status" class="status"></p>
+    </section>
+
+    <!-- ======================= 右栏：检测结果 ======================= -->
+    <section class="panel">
+
+      <div class="result-head">
+        <h2>检测结果</h2>
+        <div class="result-actions">
+          <!-- 勾选后查看原图，方便与检测结果对比 -->
+          <label class="toggle">
+            <input type="checkbox" id="show-orig" /> 查看原图
+          </label>
+          <button id="download-btn" class="btn small" hidden>下载结果图</button>
+        </div>
+      </div>
+
+      <!-- 图片查看区：无结果时显示占位说明 -->
+      <div class="viewer" id="viewer">
+        <div class="placeholder" id="placeholder">
+          <div class="ph-icon">🔍</div>
+          <p>上传或选择示例图片后，点击「开始检测」</p>
+          <p class="dz-sub">分割掩码、边界框与置信度将绘制在图片上</p>
+        </div>
+        <img id="viewer-img" alt="检测可视化结果" hidden />
+      </div>
+
+      <!-- 统计卡片：实例总数 / 分类计数 / 推理耗时 / 设备 -->
+      <div class="stats" id="stats"></div>
+
+      <!-- 实例明细表 -->
+      <div class="table-wrap" id="table-wrap" hidden>
+        <table class="inst-table">
+          <thead>
+            <tr><th>#</th><th>类别</th><th>置信度</th><th>边界框 (x1, y1, x2, y2)</th></tr>
+          </thead>
+          <tbody id="inst-tbody"></tbody>
+        </table>
+      </div>
+
+      <h3 class="history-title">最近检测</h3>
+      <div class="history" id="history">
+        <p class="hint">暂无记录</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    西南民族大学 · 电子信息学院 · 新一代电子信息技术领域 · 用于科研与教学演示
+  </footer>
+
+  <!-- 全局提示条（toast），由 app.js 控制显示 -->
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
