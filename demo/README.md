@@ -56,22 +56,12 @@ cd E:\Study\论文撰写\yolo_plus
 - 原图 / 结果图切换对比，结果图下载；
 - 最近 8 次检测历史（内存保存，刷新清空）。
 
-## 更换示例图片为真实数据集图片（推荐）
+## 示例图片
 
-当前示例图片是从训练拼图（`val_batch*_labels.jpg`）裁切的**降采样图**，
-上面残留少量真实标注痕迹，且分辨率只有原图的约 57%，模型检出置信度偏低
-（0.15–0.29），仅用于功能演示。
-
-下次云服务器开机时，建议拉取几张原始验证图替换（PowerShell，在项目根目录）：
-
-```powershell
-scp autodl:/root/yolo_data/images/val/*.jpg --% 2>$null # 先看文件名
-scp autodl:/root/yolo_data/images/val/<某几张文件名> .\demo\samples\
-```
-
-文件名包含 `leaffolder` / `stemborer` 时会自动显示对应中文标签（见
-`app.py` 的 `SAMPLE_LABELS`）。替换后无需改代码，重启服务即可；
-真实分辨率下检测置信度和掩码可视化都会明显更好。
+`demo/samples/` 内置 3 张验证集原始田间图像（按标注实例数挑选：稻纵卷叶螟两张、
+稻螟虫一张），原分辨率、无预标注，检测置信度与掩码可视化均为真实效果。
+文件名含 `leaffolder` / `stemborer` 时自动显示对应中文标签（见 `app.py` 的
+`SAMPLE_LABELS`）。可自行替换为其他验证集图片，无需改代码，重启服务即可。
 
 ## 常见问题
 
