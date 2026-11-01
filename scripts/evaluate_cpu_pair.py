@@ -365,7 +365,8 @@ def main() -> None:
                         "FP50_conf025": fp,
                     }
             result["models"][label]["metrics"][kind] = per_kind
-        print(f"[DONE] {label}: small leaffolder segm = {json.dumps(result['models'][label]['metrics']['segm']['1']['small'])}", flush=True)
+        small_metrics = result["models"][label]["metrics"]["segm"]["1"]["small"]
+        print(f"[DONE] {label}: small leaffolder segm = {json.dumps(small_metrics)}", flush=True)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")

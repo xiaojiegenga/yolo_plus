@@ -43,7 +43,8 @@ def main() -> None:
     assert "model.23.proto.cv3.conv.weight" in changed
     assert all(".proto.semseg.2." in key or ".cv3." in key or ".one2one_cv3." in key for key in changed)
     added = set(state) - set(source)
-    assert all(key.startswith(tuple(f"model.23.proto.{name}." for name in ("p2_proj", "hi_up", "hi_cv"))) for key in added)
+    proto_key_prefixes = tuple(f"model.23.proto.{name}." for name in ("p2_proj", "hi_up", "hi_cv"))
+    assert all(key.startswith(proto_key_prefixes) for key in added)
     assert not set(source) - set(state)
     print(f"Official weights: {len(matched)}/{len(state)}; shape changes={len(changed)}; added={len(added)}")
     model.eval().fuse(verbose=False)

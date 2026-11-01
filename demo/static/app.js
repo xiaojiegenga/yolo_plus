@@ -49,9 +49,11 @@ function setStatus(message, isError = false) {
   node.classList.toggle("error", isError);
 }
 
-/** 数字格式化：保留 decimals 位小数并去掉多余的 0（0.7500 -> 0.75）。 */
+/** 数字格式化：保留 decimals 位小数并去掉小数部分多余的 0（0.7500 -> 0.75；100 -> 100）。 */
 function fmtNumber(value, decimals = 2) {
-  return Number(value).toFixed(decimals).replace(/\.?0+$/, "");
+  const fixed = Number(value).toFixed(decimals);
+  if (decimals <= 0) return fixed; // 整数显示不清理任何尾零，避免 100 被误删成 1
+  return fixed.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
 }
 
 /** 请求出错时，从 Response 对象中尽量解析出后端给的中文错误信息。 */
@@ -151,8 +153,12 @@ function setFile(file) {
     return;
   }
 
-  // 释放上一张图的预览地址，避免内存泄漏
-  if (state.originalUrl) URL.revokeObjectURL(state.originalUrl);
+  // 释放上一张图的预览地址，避免内存泄漏。
+  // 注意：历史记录会引用各自的 originalUrl，因此这里只在旧地址
+  // 不再被任何历史记录使用时才释放，由 appendHistory 淘汰时兜底回收。
+  if (state.originalUrl && !state.history.some((r) => r.originalUrl === state.originalUrl)) {
+    URL.revokeObjectURL(state.originalUrl);
+  }
 
   state.file = file;
   state.result = null;
@@ -195,11 +201,14 @@ async function detect() {
     if (!response.ok) throw new Error(await readError(response));
 
     const data = await response.json();
+    // 绑定本次检测对应的原图：历史记录回看时才能恢复正确的原图对比
+    data.originalUrl = state.originalUrl;
+    data.sourceName = state.file ? state.file.name : "";
     state.result = data;
     renderResult(data);
     appendHistory(data);
     setStatus(
-      `检测完成：${data.instance_count} 个实例 · 端到端 ${fmtNumber(data.wall_ms, 0)} ms`
+      `检测完成：${data.instance_count} 个实例 · 服务端推理 ${fmtNumber(data.wall_ms, 0)} ms`
     );
   } catch (error) {
     setStatus(error.message, true);
@@ -240,8 +249,10 @@ function renderResult(data) {
     );
   }
   cards.push(
-    `<div class="stat-card"><div class="num">${fmtNumber(data.speed.inference, 1)}</div><div class="label">网络前向 (ms)</div></div>`,
-    `<div class="stat-card"><div class="num">${fmtNumber(data.wall_ms, 0)}</div><div class="label">端到端耗时 (ms)</div></div>`
+    `<div class="stat-card"><div class="num">${fmtNumber(data.speed.inference, 1)}</div>` +
+      `<div class="label">网络前向 (ms)</div></div>`,
+    `<div class="stat-card"><div class="num">${fmtNumber(data.wall_ms, 0)}</div>` +
+      `<div class="label">服务端推理 (ms)</div></div>`
   );
   el("stats").innerHTML = cards.join("");
 
@@ -267,10 +278,16 @@ function renderResult(data) {
 
 /* ------------------------------ 历史记录 ------------------------------ */
 
-/** 把一次检测结果追加到历史区（仅保存在内存中，最多 8 条）。 */
+/** 把一次检测结果追加到历史区（仅保存在内存中，最多 8 条，刷新页面后清空）。 */
 function appendHistory(data) {
   state.history.unshift(data);
-  if (state.history.length > 8) state.history.pop();
+  if (state.history.length > 8) {
+    // 淘汰最旧记录；若其原图预览地址仍被当前查看状态引用则不释放
+    const evicted = state.history.pop();
+    if (evicted.originalUrl && evicted.originalUrl !== state.originalUrl) {
+      URL.revokeObjectURL(evicted.originalUrl);
+    }
+  }
 
   const container = el("history");
   container.innerHTML = "";
@@ -280,9 +297,10 @@ function appendHistory(data) {
     item.innerHTML =
       `<img src="data:image/jpeg;base64,${record.image}" alt="历史结果">` +
       `<div class="hi-meta">${record.instance_count} 实例 · ${fmtNumber(record.wall_ms, 0)}ms</div>`;
-    // 点击历史条目可回看该次结果
+    // 点击历史条目可回看该次结果（同时恢复该次对应的原图与阈值）
     item.addEventListener("click", () => {
       state.result = record;
+      state.originalUrl = record.originalUrl || state.originalUrl;
       renderResult(record);
       el("conf").value = record.conf_threshold;
       el("conf-val").textContent = Number(record.conf_threshold).toFixed(2);

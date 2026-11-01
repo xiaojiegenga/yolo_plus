@@ -50,7 +50,10 @@ def main():
 
     torch.set_num_threads(2)
     images = sorted(p for p in (args.data_root / "images/val").iterdir() if p.suffix.lower() in {".jpg", ".jpeg", ".png"})
-    gt = {"images": [], "annotations": [], "categories": [{"id": 1, "name": "Rice leaffolder"}, {"id": 2, "name": "Rice stemborers"}]}
+    gt = {"images": [], "annotations": [], "categories": [
+        {"id": 1, "name": "Rice leaffolder"},
+        {"id": 2, "name": "Rice stemborers"},
+    ]}
     gains, counts, paths = {}, Counter(), {}
     for image_id, path in enumerate(images, 1):
         with Image.open(path) as image:
@@ -85,7 +88,8 @@ def main():
             "data_root": str(args.data_root.resolve()), "source_root": str(args.source_root.resolve()),
             "ultralytics": __version__, "torch": torch.__version__, "device": torch.cuda.get_device_name(0),
             "imgsz": 640, "rect": False, "batch": 1, "half": False, "conf": 0.001, "iou": 0.7, "max_det": 300,
-            "retina_masks": True, "small": "GT and unmatched prediction bbox area * (640/max(original_h,original_w))^2 < 1024",
+            "retina_masks": True,
+            "small": "GT and unmatched prediction bbox area * (640/max(original_h,original_w))^2 < 1024",
             "metric": "COCOeval 101-point AP at IoU .50:.05:.95; R50_025 uses IoU=.50 and conf>=.25",
             "area_policy": "BBox area at 640 for both bbox and segm; retain out-of-range GT as ignored matching objects",
             "mask_policy": "COCO polygon rasterization for GT; full-resolution predicted masks",
