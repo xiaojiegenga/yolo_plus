@@ -184,6 +184,12 @@ function setFile(file) {
 async function detect() {
   if (!state.file) return;
 
+  // 在发起请求前固定本次检测的全部输入状态：等待响应期间用户仍可能
+  // 通过上传/拖拽/粘贴更换图片，不能在 await 之后再读全局 state
+  const file = state.file;
+  const sourceName = file ? file.name : "";
+  const conf = el("conf").value;
+
   const button = el("detect-btn");
   button.disabled = true;
   button.classList.add("busy");
@@ -194,16 +200,19 @@ async function detect() {
     // FormData 对应 HTTP 的 multipart/form-data，
     // 与后端 predict(file: UploadFile, conf: Form) 的参数名一一对应
     const formData = new FormData();
-    formData.append("file", state.file);
-    formData.append("conf", el("conf").value);
+    formData.append("file", file);
+    formData.append("conf", conf);
 
     const response = await fetch("/api/predict", { method: "POST", body: formData });
     if (!response.ok) throw new Error(await readError(response));
 
     const data = await response.json();
-    // 绑定本次检测对应的原图：历史记录回看时才能恢复正确的原图对比
-    data.originalUrl = state.originalUrl;
-    data.sourceName = state.file ? state.file.name : "";
+    // 为本条记录创建独立的原图预览 URL（同一文件允许对应多个 URL），
+    // 多次检测同一张图时各记录互不影响，也避免与其他记录共享 URL 被误释放
+    data.originalUrl = URL.createObjectURL(file);
+    // 保存源 File：历史回看后可直接对该原图重新检测
+    data.sourceFile = file;
+    data.sourceName = sourceName;
     state.result = data;
     renderResult(data);
     appendHistory(data);
@@ -282,10 +291,14 @@ function renderResult(data) {
 function appendHistory(data) {
   state.history.unshift(data);
   if (state.history.length > 8) {
-    // 淘汰最旧记录；若其原图预览地址仍被当前查看状态引用则不释放
+    // 淘汰最旧记录；释放其 URL 前需确认没有其他引用（当前查看状态、
+    // 剩余历史记录或在途请求），否则共享同一 URL 的记录会显示失败
     const evicted = state.history.pop();
-    if (evicted.originalUrl && evicted.originalUrl !== state.originalUrl) {
-      URL.revokeObjectURL(evicted.originalUrl);
+    const url = evicted.originalUrl;
+    const stillUsed =
+      url === state.originalUrl || state.history.some((r) => r.originalUrl === url);
+    if (url && !stillUsed) {
+      URL.revokeObjectURL(url);
     }
   }
 
@@ -297,13 +310,19 @@ function appendHistory(data) {
     item.innerHTML =
       `<img src="data:image/jpeg;base64,${record.image}" alt="历史结果">` +
       `<div class="hi-meta">${record.instance_count} 实例 · ${fmtNumber(record.wall_ms, 0)}ms</div>`;
-    // 点击历史条目可回看该次结果（同时恢复该次对应的原图与阈值）
+    // 点击历史条目可回看该次结果：同时恢复该次对应的原图、源文件与阈值，
+    // 之后点击“开始检测”即对该原图重新检测
     item.addEventListener("click", () => {
       state.result = record;
       state.originalUrl = record.originalUrl || state.originalUrl;
+      state.file = record.sourceFile || state.file;
       renderResult(record);
       el("conf").value = record.conf_threshold;
       el("conf-val").textContent = Number(record.conf_threshold).toFixed(2);
+      if (record.sourceName) {
+        const confText = Number(record.conf_threshold).toFixed(2);
+        setStatus(`回看记录：${record.sourceName}（阈值 ${confText}），可再次检测该原图`);
+      }
     });
     container.appendChild(item);
   });
